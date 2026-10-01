@@ -1,20 +1,13 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { createClient } from "../utils/supabase/server";
 
-// Define the Todo structure
-interface Todo {
-  id: string | number;
-  name: string;
-}
+
+
 
 export default async function Home() {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const response = await fetch("http://127.0.0.1:8000/api/v1/health");
+  const healthData = await response.json();
 
-  // Type the queried response or cast the array
-  const { data } = await supabase.from("todos").select();
-  const todos = (data as Todo[] | null) ?? [];
+
 
   const features = [
     {
@@ -88,37 +81,15 @@ export default async function Home() {
           </a>
         </div>
 
-        {/* Live Supabase Feed */}
-        <div className="mt-12 w-full max-w-xl text-left">
-          <div className="overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/50 backdrop-blur-sm shadow-xl">
-            <div className="flex items-center justify-between border-b border-zinc-800/80 bg-zinc-900/80 px-4 py-3">
-              <span className="text-xs font-mono font-semibold uppercase tracking-wider text-zinc-400">
-                Connected Workspace Tasks
-              </span>
-              <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                Supabase Sync
-              </span>
-            </div>
-            
-            <ul className="divide-y divide-zinc-800/50 p-2">
-              {todos.length > 0 ? (
-                todos.map((todo: Todo) => (
-                  <li
-                    key={todo.id}
-                    className="flex items-center gap-3 px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800/40 rounded-lg transition"
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" />
-                    <span>{todo.name}</span>
-                  </li>
-                ))
-              ) : (
-                <li className="px-3 py-6 text-center text-xs text-zinc-500">
-                  No active tasks found in the database.
-                </li>
-              )}
-            </ul>
-          </div>
+                <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+          <p className="text-sm text-zinc-400">Backend Status</p>
+          <p className="mt-2 text-lg font-semibold text-emerald-400">
+            {healthData.status}
+          </p>
         </div>
+            
+            
+          
 
         <div className="mt-16 grid w-full grid-cols-1 gap-4 text-left sm:grid-cols-3">
           {features.map((item) => (
