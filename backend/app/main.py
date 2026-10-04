@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router as api_router
 
@@ -8,6 +8,7 @@ app = FastAPI(
     description="Backend services powering Cognitive Workspace"
 )
 
+# Enable CORS for frontend clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,5 +24,15 @@ async def root():
         "docs_url": "/docs"
     }
 
-app.include_router(api_router, prefix="/api/v1")
+# Health Check Route meeting task specification
+@app.get(
+    "/health",
+    tags=["System"],
+    status_code=status.HTTP_200_OK,
+    summary="Health Check"
+)
+async def health_check():
+    return {"status": "ok"}
 
+# Mount modular API routes for other features
+app.include_router(api_router, prefix="/api/v1")
