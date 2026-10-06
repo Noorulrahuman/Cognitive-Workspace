@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const { user, signOut, isLoading: authLoading } = useAuth();
   const [backendStatus, setBackendStatus] = useState<"online" | "offline" | "checking">("checking");
 
   useEffect(() => {
@@ -44,8 +46,13 @@ export default function Navbar() {
     { name: "AI Copilot", href: "/chat" },
   ];
 
+  const userDisplayName =
+    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+  const userInitials =
+    userDisplayName.slice(0, 2).toUpperCase() || "CW";
+
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-4 sm:px-8 py-3.5 transition-all">
+    <header className="sticky top-0 z-50 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-4 sm:px-8 py-3 transition-all">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         {/* Brand */}
         <div className="flex items-center gap-6">
@@ -77,10 +84,10 @@ export default function Navbar() {
           </nav>
         </div>
 
-        {/* Right side status & action */}
+        {/* Right side auth & status */}
         <div className="flex items-center gap-3">
           {/* Backend Status Pill */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-800 bg-zinc-900/80 text-[11px] font-mono">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-800 bg-zinc-900/80 text-[11px] font-mono">
             <span
               className={`h-2 w-2 rounded-full ${
                 backendStatus === "online"
@@ -100,25 +107,51 @@ export default function Navbar() {
                   : "text-red-400"
               }
             >
-              {backendStatus === "online" ? "Online" : backendStatus === "checking" ? "Checking..." : "Offline"}
+              {backendStatus === "online" ? "Online" : backendStatus === "checking" ? "..." : "Offline"}
             </span>
           </div>
 
-          {/* New Project Link */}
-          <Link
-            href="/projects"
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all active:scale-95"
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Manage Projects
-          </Link>
+          {/* Auth State Button / User Profile */}
+          {!authLoading && (
+            user ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/90 text-xs">
+                  <div className="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
+                    {userInitials}
+                  </div>
+                  <span className="hidden lg:inline text-zinc-300 font-medium text-xs max-w-[130px] truncate">
+                    {userDisplayName}
+                  </span>
+                </div>
+                <button
+                  onClick={() => signOut()}
+                  className="px-2.5 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
+                  title="Sign out"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/login"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    pathname === "/login"
+                      ? "bg-zinc-800 text-white"
+                      : "text-zinc-300 hover:text-white hover:bg-zinc-900 border border-zinc-800"
+                  }`}
+                >
+                  Sign In
+                </Link>
+                <Link
+                  href="/login?tab=register"
+                  className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                >
+                  Register
+                </Link>
+              </div>
+            )
+          )}
         </div>
       </div>
 
