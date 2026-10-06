@@ -3,9 +3,21 @@ import Link from "next/link";
 
 
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
-  const response = await fetch("http://127.0.0.1:8000/api/v1/health");
-  const healthData = await response.json();
+  let healthStatus = "offline";
+  try {
+    const response = await fetch("http://127.0.0.1:8000/api/v1/health", {
+      cache: "no-store",
+    });
+    if (response.ok) {
+      const healthData = await response.json();
+      healthStatus = healthData.status ?? "ok";
+    }
+  } catch {
+    healthStatus = "offline";
+  }
 
 
 
@@ -28,27 +40,12 @@ export default async function Home() {
   ];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+    <div className="flex-1 flex flex-col justify-between relative overflow-hidden">
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-950/0 to-transparent" />
 
-      <header className="relative z-10 border-b border-zinc-800/80 px-6 py-4 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-3 w-3 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono text-sm tracking-wider uppercase text-zinc-400">
-              Cognitive Workspace
-            </span>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-mono text-zinc-400">
-            <span className="rounded-md border border-zinc-800 bg-zinc-900/70 px-2.5 py-1">
-              v1.0.0
-            </span>
-          </div>
-        </div>
-      </header>
-
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 py-16 text-center sm:py-24">
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 py-12 text-center sm:py-20">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-3.5 py-1 text-xs font-medium text-indigo-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />
           <span>AI-Powered Research & Contextual Copilot</span>
         </div>
 
@@ -64,27 +61,43 @@ export default async function Home() {
           to ingest documents, synthesize complex insights, and automate end-to-end task pipelines.
         </p>
 
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/projects"
+            className="flex h-11 items-center justify-center rounded-lg bg-indigo-600 px-6 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-500 active:scale-95"
+          >
+            Manage Projects &rarr;
+          </Link>
           <Link
             href="/chat"
-            className="flex h-11 items-center justify-center rounded-lg bg-indigo-600 px-6 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-500"
+            className="flex h-11 items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-950/40 px-6 text-sm font-semibold text-indigo-200 transition hover:bg-indigo-900/50 hover:text-white"
           >
-            Launch Workspace &rarr;
+            Launch Copilot
+          </Link>
+          <Link
+            href="/requirements"
+            className="flex h-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 px-6 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+          >
+            Requirements & Specs
           </Link>
           <a
             href="http://localhost:8000/docs"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/80 px-6 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+            className="flex h-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/60 px-5 text-sm font-semibold text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
           >
-            Backend API Docs
+            API Docs
           </a>
         </div>
 
                 <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
           <p className="text-sm text-zinc-400">Backend Status</p>
-          <p className="mt-2 text-lg font-semibold text-emerald-400">
-            {healthData.status}
+          <p
+            className={`mt-2 text-lg font-semibold ${
+              healthStatus === "ok" ? "text-emerald-400" : "text-amber-400"
+            }`}
+          >
+            {healthStatus}
           </p>
         </div>
             
