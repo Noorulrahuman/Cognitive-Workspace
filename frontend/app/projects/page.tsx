@@ -5,6 +5,8 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+
 interface Project {
   id: string;
   name: string;
@@ -169,7 +171,7 @@ export default function ProjectsPage() {
 
     // 2. Fallback: Query backend API
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/projects");
+      const res = await fetch(`${API_URL}/api/v1/projects`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -206,6 +208,19 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  // Esc key closes any open modal
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsAddModalOpen(false);
+        setIsSqlModalOpen(false);
+        setProjectToDelete(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Handle Add Project Submit
   const handleAddProject = async (e: React.FormEvent) => {
@@ -260,7 +275,7 @@ export default function ProjectsPage() {
 
     // 2. Also notify backend API if available
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/projects", {
+      const res = await fetch(`${API_URL}/api/v1/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(projectPayload)
@@ -323,7 +338,7 @@ export default function ProjectsPage() {
 
     // Delete from backend API
     try {
-      await fetch(`http://127.0.0.1:8000/api/v1/projects/${targetId}`, {
+      await fetch(`${API_URL}/api/v1/projects/${targetId}`, {
         method: "DELETE"
       });
     } catch {
