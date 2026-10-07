@@ -11,3 +11,10 @@ Cognitive-Workspace/
 ├── README.md          # Project documentation
 ├── .gitignore         # Git ignore rules
 └── .env.example       # Environment variable template
+
+## Python Requirments
+
+- Python 3.11 or higher is required.
+- Development version verified: Python 3.14.7
+- Python package manager: uv
+- pip is available with the system Python installation.
