@@ -3,8 +3,20 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime
+import os
+import httpx
 
 router = APIRouter()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
+def get_supabase_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
 
 class ProjectBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -12,6 +24,7 @@ class ProjectBase(BaseModel):
     category: str = Field(default="Agentic Workflow")
     tags: List[str] = Field(default_factory=list)
     source_url: Optional[str] = None
+    user_id: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     pass
@@ -22,7 +35,7 @@ class Project(ProjectBase):
     status: str = "Active"
     created_at: str
 
-# In-memory initial project repository
+# In-memory initial project repository fallback
 _PROJECTS_STORE: List[dict] = [
     {
         "id": "proj-1",
@@ -65,22 +78,51 @@ async def health_check():
 
 @router.get("/workspace/status", tags=["Workspace"])
 async def workspace_status():
+    count = len(_PROJECTS_STORE)
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                res = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/projects?select=id",
+                    headers=get_supabase_headers()
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    if isinstance(data, list):
+                        count = len(data)
+        except Exception:
+            pass
+
     return {
         "workspace": "Cognitive Workspace",
         "active": True,
-        "projects_count": len(_PROJECTS_STORE)
+        "projects_count": count,
+        "database": "Supabase" if (SUPABASE_URL and SUPABASE_KEY) else "In-Memory"
     }
 
 @router.get("/projects", response_model=List[Project], tags=["Projects"])
 async def list_projects():
-    """Retrieve all active workspace projects."""
+    """Retrieve all workspace projects from Supabase or memory store."""
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/projects?select=*&order=created_at.desc",
+                    headers=get_supabase_headers()
+                )
+                if res.status_code == 200:
+                    data = res.json()
+                    if isinstance(data, list) and len(data) > 0:
+                        return data
+        except Exception:
+            pass
+
     return _PROJECTS_STORE
 
 @router.post("/projects", response_model=Project, status_code=status.HTTP_201_CREATED, tags=["Projects"])
 async def create_project(payload: ProjectCreate):
-    """Add a new project to the cognitive workspace."""
-    new_project = {
-        "id": f"proj-{uuid.uuid4().hex[:8]}",
+    """Add a new project and store all its details in Supabase."""
+    project_payload = {
         "name": payload.name,
         "description": payload.description,
         "category": payload.category,
@@ -88,18 +130,60 @@ async def create_project(payload: ProjectCreate):
         "source_url": payload.source_url,
         "documents_count": 1 if payload.source_url else 0,
         "status": "Active",
+        "user_id": payload.user_id
+    }
+
+    # Persist to Supabase if credentials configured
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                headers = get_supabase_headers()
+                headers["Prefer"] = "return=representation"
+                res = await client.post(
+                    f"{SUPABASE_URL}/rest/v1/projects",
+                    headers=headers,
+                    json=project_payload
+                )
+                if res.status_code in (200, 201):
+                    created_list = res.json()
+                    if isinstance(created_list, list) and len(created_list) > 0:
+                        created = created_list[0]
+                        # Keep memory store synced
+                        _PROJECTS_STORE.insert(0, created)
+                        return created
+        except Exception:
+            pass
+
+    # Fallback to local memory repository
+    fallback_project = {
+        "id": f"proj-{uuid.uuid4().hex[:8]}",
+        **project_payload,
         "created_at": datetime.utcnow().isoformat() + "Z"
     }
-    _PROJECTS_STORE.insert(0, new_project)
-    return new_project
+    _PROJECTS_STORE.insert(0, fallback_project)
+    return fallback_project
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_200_OK, tags=["Projects"])
 async def delete_project(project_id: str):
-    """Remove a project from the workspace by its ID."""
+    """Remove a project from Supabase and memory store."""
+    deleted_from_supabase = False
+    if SUPABASE_URL and SUPABASE_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                res = await client.delete(
+                    f"{SUPABASE_URL}/rest/v1/projects?id=eq.{project_id}",
+                    headers=get_supabase_headers()
+                )
+                if res.status_code in (200, 204):
+                    deleted_from_supabase = True
+        except Exception:
+            pass
+
     global _PROJECTS_STORE
     original_len = len(_PROJECTS_STORE)
     _PROJECTS_STORE = [p for p in _PROJECTS_STORE if p["id"] != project_id]
-    if len(_PROJECTS_STORE) == original_len:
+
+    if not deleted_from_supabase and len(_PROJECTS_STORE) == original_len:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project with ID '{project_id}' not found."

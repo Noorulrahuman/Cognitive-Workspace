@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 interface Message {
   id: string;
@@ -48,12 +49,44 @@ function ChatContent() {
     scrollToBottom();
   }, [messages, isProcessing]);
 
-  const projectsList = [
+  const [projectsList, setProjectsList] = useState<string[]>([
     "Financial Document Intelligence",
     "Biomedical Literature Search",
     "Regulatory Web Scraper",
     "General Cognitive Workspace",
-  ];
+  ]);
+
+  useEffect(() => {
+    async function fetchProjectNames() {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.from("projects").select("name").order("name");
+        if (!error && data && data.length > 0) {
+          const names = Array.from(new Set([...data.map((p) => p.name), "General Cognitive Workspace"]));
+          setProjectsList(names);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("cognitive_projects");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const names = Array.from(new Set([...parsed.map((p: any) => p.name), "General Cognitive Workspace"]));
+              setProjectsList(names);
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+    fetchProjectNames();
+  }, []);
 
   const handleSendMessage = (textToSend?: string) => {
     const text = (textToSend || inputPrompt).trim();
