@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+   "dev": "concurrently \"next dev\" \"cd ../backend && ..\\.cw-venv\\Scripts\\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -20,6 +20,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.5",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
