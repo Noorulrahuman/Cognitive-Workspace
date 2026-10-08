@@ -5,6 +5,9 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
+cd frontend
+npm install
+
 npm run dev
 # or
 yarn dev
@@ -19,6 +22,17 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Cognitive Workspace Frontend
+
+The Cognitive Workspace frontend provides the user interface for managing projects, requirements, and AI-assisted workspace interactions.
+
+### Current Frontend Updates
+
+- Updated the main workspace UI.
+- Improved the shared Navbar and global styling.
+- Enhanced Projects and Requirements pages.
+- Updated the Chat workspace interface.
 
 ## Learn More
 
