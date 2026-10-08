@@ -1,43 +1,45 @@
 import Link from "next/link";
 
-
-
-
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  let healthStatus = "offline";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const HEALTHY_STATES = ["ok", "healthy"];
+
+const FEATURES = [
+  {
+    title: "Agentic Workflows",
+    tag: "LangGraph",
+    desc: "Multi-agent cognitive loops coordinating retrieval, reasoning, and automated decision making.",
+  },
+  {
+    title: "Semantic Vector Search",
+    tag: "pgvector & Supabase",
+    desc: "Fast, dense retrieval over contextual embeddings ensuring relevant document grounding.",
+  },
+  {
+    title: "High-Performance API",
+    tag: "FastAPI",
+    desc: "Asynchronous backend endpoints delivering sub-second response times and streaming completions.",
+  },
+];
+
+async function getHealthStatus(): Promise<string> {
   try {
-    const response = await fetch("http://127.0.0.1:8000/api/v1/health", {
+    const response = await fetch(`${API_URL}/api/v1/health`, {
       cache: "no-store",
+      signal: AbortSignal.timeout(3000),
     });
-    if (response.ok) {
-      const healthData = await response.json();
-      healthStatus = healthData.status ?? "ok";
-    }
+    if (!response.ok) return "offline";
+    const data = await response.json();
+    return data.status ?? "ok";
   } catch {
-    healthStatus = "offline";
+    return "offline";
   }
+}
 
-
-
-  const features = [
-    {
-      title: "Agentic Workflows",
-      tag: "LangGraph",
-      desc: "Multi-agent cognitive loops coordinating retrieval, reasoning, and automated decision making.",
-    },
-    {
-      title: "Semantic Vector Search",
-      tag: "pgvector & Supabase",
-      desc: "Fast, dense retrieval over contextual embeddings ensuring relevant document grounding.",
-    },
-    {
-      title: "High-Performance API",
-      tag: "FastAPI",
-      desc: "Asynchronous backend endpoints delivering sub-second response times and streaming completions.",
-    },
-  ];
+export default async function Home() {
+  const healthStatus = await getHealthStatus();
+  const isHealthy = HEALTHY_STATES.includes(healthStatus);
 
   return (
     <div className="flex-1 flex flex-col justify-between relative overflow-hidden">
@@ -58,7 +60,8 @@ export default async function Home() {
 
         <p className="mt-6 max-w-2xl text-base sm:text-lg leading-relaxed text-zinc-400">
           Cognitive Workspace unites agent orchestration and semantic retrieval
-          to ingest documents, synthesize complex insights, and automate end-to-end task pipelines.
+          to ingest documents, synthesize complex insights, and automate
+          end-to-end task pipelines.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -72,7 +75,7 @@ export default async function Home() {
             href="/chat"
             className="flex h-11 items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-950/40 px-6 text-sm font-semibold text-indigo-200 transition hover:bg-indigo-900/50 hover:text-white"
           >
-            Launch Copilot
+            Launch Gemini
           </Link>
           <Link
             href="/requirements"
@@ -80,32 +83,31 @@ export default async function Home() {
           >
             Requirements & Specs
           </Link>
-          <a
-            href="http://localhost:8000/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex h-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/60 px-5 text-sm font-semibold text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
-          >
-            API Docs
-          </a>
+          {process.env.NODE_ENV === "development" && (
+            <a
+              href={`${API_URL}/docs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-11 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900/60 px-5 text-sm font-semibold text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+            >
+              API Docs
+            </a>
+          )}
         </div>
 
-                <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+        <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
           <p className="text-sm text-zinc-400">Backend Status</p>
           <p
             className={`mt-2 text-lg font-semibold ${
-              healthStatus === "ok" ? "text-emerald-400" : "text-amber-400"
+              isHealthy ? "text-emerald-400" : "text-amber-400"
             }`}
           >
             {healthStatus}
           </p>
         </div>
-            
-            
-          
 
         <div className="mt-16 grid w-full grid-cols-1 gap-4 text-left sm:grid-cols-3">
-          {features.map((item) => (
+          {FEATURES.map((item) => (
             <div
               key={item.title}
               className="group relative rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-6 backdrop-blur-sm transition-all hover:border-zinc-700 hover:bg-zinc-900/80"
