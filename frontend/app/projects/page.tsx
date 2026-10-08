@@ -7,6 +7,56 @@ import { useAuth } from "@/components/AuthProvider";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
+// ---------- Small helpers used by the project cards ----------
+
+// Accent colors for the project icons. Each project gets one of them,
+// picked from its name, so the same project always has the same color
+// (no database column is needed).
+const PROJECT_COLORS = [
+  "from-indigo-500 to-violet-500",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-500",
+  "from-sky-500 to-cyan-500",
+  "from-rose-500 to-pink-500",
+  "from-fuchsia-500 to-purple-500",
+];
+
+// Turns a project name into a number, then into one of the colors above
+function getProjectColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) % 1000003;
+  }
+  return PROJECT_COLORS[hash % PROJECT_COLORS.length];
+}
+
+// First letter of the project name, shown inside the colored icon
+function getProjectInitial(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || "P";
+}
+
+// "https://www.sec.gov/edgar" -> "sec.gov" (only the website name, not the whole link)
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+// "2026-10-08T10:00:00Z" -> "Oct 8, 2026".
+// Fixed English format, so "10/8/2026" can never be confused with 10 August.
+function formatDate(iso: string): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 interface Project {
   id: string;
   name: string;
@@ -96,6 +146,8 @@ export default function ProjectsPage() {
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  // NEW: the project whose details popup is open (null = popup closed)
+  const [projectDetail, setProjectDetail] = useState<Project | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form states
@@ -216,6 +268,7 @@ export default function ProjectsPage() {
         setIsAddModalOpen(false);
         setIsSqlModalOpen(false);
         setProjectToDelete(null);
+        setProjectDetail(null); // NEW: also close the details popup
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -317,9 +370,9 @@ export default function ProjectsPage() {
     setIsAddModalOpen(false);
 
     if (savedToSupabase) {
-      showToast(`Project "${createdProject.name}" successfully saved to Supabase! ✨`);
+      showToast(`Project "${createdProject.name}" created.`);
     } else {
-      showToast(`Project "${createdProject.name}" saved locally. (Supabase table setup needed)`);
+      showToast(`Project "${createdProject.name}" created (saved in this browser only).`);
     }
   };
 
@@ -412,47 +465,35 @@ export default function ProjectsPage() {
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-zinc-800">
         <div>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium">
-              <span>Workspace Management</span>
-            </div>
-
-            {/* Supabase live badge */}
-            {supabaseConnected === true ? (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Supabase Live DB</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsSqlModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:text-white text-xs font-medium cursor-pointer transition-colors"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                <span>Supabase Schema Ready</span>
-              </button>
-            )}
-          </div>
-
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Projects & Pipelines
+          {/* Title with a project counter and a tiny connection dot */}
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
+            Projects
+            {/* How many projects exist in total */}
+            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
+              {projects.length}
+            </span>
+            {/* Connection dot (replaces the old "Supabase Live DB" pill).
+                Green = saved in the database, yellow = saved in this browser only.
+                Hover over it to read the text. */}
+            <span
+              title={
+                supabaseConnected === true
+                  ? "Connected to the database"
+                  : "Working offline (saved in this browser only)"
+              }
+              className={`h-2 w-2 rounded-full ${
+                supabaseConnected === true ? "bg-emerald-400" : "bg-amber-400"
+              }`}
+            />
           </h1>
-          <p className="mt-1 text-sm text-zinc-400 max-w-xl">
-            Create, configure, and manage projects stored directly in your Supabase database with pgvector, document indices, and autonomous agent loops.
+          {/* Simple description (the old one was too technical) */}
+          <p className="mt-2 text-sm text-zinc-400 max-w-xl">
+            Your workspaces for documents and AI conversations. Open a project to chat with its documents.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsSqlModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-300 hover:text-white transition-all cursor-pointer"
-            title="View Supabase SQL Table Schema"
-          >
-            <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-16 5h16" />
-            </svg>
-            SQL Schema
-          </button>
+
 
           <button
             onClick={() => setIsAddModalOpen(true)}
@@ -522,7 +563,11 @@ export default function ProjectsPage() {
             </div>
             <h3 className="text-sm font-semibold text-zinc-300">No projects found</h3>
             <p className="mt-1 text-xs text-zinc-500">
-              {searchQuery ? "Try refining your search query or filter." : "Get started by adding your first project to Supabase."}
+              {
+                searchQuery || selectedCategory !== "All"
+                ? "Try a different search or filter."
+                : "Create your first project to get started."
+              }
             </p>
             <button
               onClick={() => setIsAddModalOpen(true)}
@@ -536,42 +581,78 @@ export default function ProjectsPage() {
             {filteredProjects.map((project) => (
               <div
                 key={project.id}
-                className="group relative flex flex-col justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-6 backdrop-blur-sm transition-all hover:border-zinc-700 hover:bg-zinc-900/90 shadow-sm"
+                // NEW: clicking the card opens the details popup
+                onClick={() => setProjectDetail(project)}
+                // NEW: keyboard support. Enter or Space on the focused card opens it.
+                // (e.target === e.currentTarget means the key was pressed on the card
+                // itself, not on the buttons inside it)
+                onKeyDown={(e) => {
+                  if ((e.key === "Enter" || e.key === " ") && e.target === e.currentTarget) {
+                    e.preventDefault();
+                    setProjectDetail(project);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+                className="group relative flex flex-col justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-6 backdrop-blur-sm transition-all hover:border-zinc-700 hover:bg-zinc-900/90 shadow-sm cursor-pointer"
               >
                 <div>
-                  {/* Card Header */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
-                      {project.category}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      <span className="text-[11px] font-mono text-zinc-400">{project.status}</span>
+                                    {/* Card header: colored icon + name + category */}
+                  <div className="flex items-start gap-3">
+                    {/* Colored square with the first letter of the project name */}
+                    <div
+                      className={`h-10 w-10 shrink-0 rounded-xl bg-linear-to-br ${getProjectColor(
+                        project.name
+                      )} flex items-center justify-center text-base font-bold text-white shadow-lg`}
+                    >
+                      {getProjectInitial(project.name)}
                     </div>
+
+                    {/* Name (one line, "..." if too long) and category */}
+                    <div className="min-w-0 flex-1">
+                      <h3
+                        title={project.name}
+                        className="truncate text-base font-semibold text-zinc-100 group-hover:text-indigo-400 transition-colors"
+                      >
+                        {project.name}
+                      </h3>
+                      <p className="mt-0.5 text-[11px] font-mono text-zinc-500">
+                        {project.category}
+                      </p>
+                    </div>
+
+                    {/* Status badge: shown only when the status is NOT "Active".
+                        (Every project was "Active", so it told the user nothing.) */}
+                    {project.status !== "Active" && (
+                      <span className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-300">
+                        {project.status}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Title & Description */}
-                  <h3 className="text-lg font-bold text-zinc-100 group-hover:text-indigo-400 transition-colors">
-                    {project.name}
-                  </h3>
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-400 line-clamp-3">
+                  {/* Description (maximum 3 lines) */}
+                  <p className="mt-4 text-xs leading-relaxed text-zinc-400 line-clamp-3">
                     {project.description}
                   </p>
 
                   {/* Source URL if present */}
-                  {project.source_url && (
+                  {/* Show the link only if it is a real web address (starts with http/https).
+                  Text like "abcd" is hidden on the card (it is still visible in the popup). */}
+                  {project.source_url && /^https?:\/\//i.test(project.source_url) && (
                     <div className="mt-3 flex items-center gap-1.5 text-[11px] text-zinc-500 truncate font-mono">
                       <svg className="w-3.5 h-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                       </svg>
-                      <span className="truncate">{project.source_url}</span>
+                      {/* Only the website name, e.g. "sec.gov" */}
+                      <span className="truncate">{getDomain(project.source_url)}</span>
                     </div>
                   )}
 
-                  {/* Tags */}
+
+                  {/* Tags: show only the first 3, then a "+N" chip for the rest */}
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {Array.isArray(project.tags) &&
-                      project.tags.map((tag) => (
+                      project.tags.slice(0, 3).map((tag) => (
                         <span
                           key={tag}
                           className="rounded border border-zinc-800 bg-zinc-950/60 px-2 py-0.5 text-[10px] font-mono text-zinc-400"
@@ -579,15 +660,22 @@ export default function ProjectsPage() {
                           {tag}
                         </span>
                       ))}
+
+                    {/* "+2" chip: appears only when the project has more than 3 tags */}
+                    {Array.isArray(project.tags) && project.tags.length > 3 && (
+                      <span className="rounded border border-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-500">
+                        +{project.tags.length - 3}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {/* Footer details & Actions */}
                 <div className="mt-6 pt-4 border-t border-zinc-800/60 flex items-center justify-between">
                   <div className="flex flex-col gap-0.5 text-[11px] text-zinc-500 font-mono">
-                    <span>{project.documents_count} docs indexed</span>
+                    <span>{project.documents_count} {project.documents_count === 1 ? "doc" : "docs"} indexed</span>
                     <span className="text-[9px] text-zinc-600">
-                      {project.created_at ? new Date(project.created_at).toLocaleDateString() : ""}
+                      {formatDate(project.created_at)}
                     </span>
                   </div>
 
@@ -596,14 +684,19 @@ export default function ProjectsPage() {
                       href={`/chat?project=${encodeURIComponent(project.name)}`}
                       className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-800 hover:bg-indigo-600 text-zinc-300 hover:text-white transition-colors"
                       title="Open in AI Copilot"
+                      // NEW: stop this click from also opening the details popup
+                      onClick={(e) => e.stopPropagation()}
                     >
                       Copilot &rarr;
                     </Link>
 
                     {/* Remove Project Button */}
                     <button
-                      onClick={() => setProjectToDelete(project)}
-                      className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation(); // NEW: do not open the details popup
+                        setProjectToDelete(project);
+                      }}
+                      className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
                       title="Remove Project"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -618,6 +711,122 @@ export default function ProjectsPage() {
         )}
       </div>
 
+            {/* PROJECT DETAILS MODAL: opens when a project card is clicked */}
+      {projectDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4"
+          onClick={() => setProjectDetail(null)} // clicking the dark background closes it
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${projectDetail.name} details`}
+            className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-scale-up"
+            onClick={(e) => e.stopPropagation()} // clicks inside the popup must not close it
+          >
+            {/* Top row: category + status on the left, close (X) button on the right */}
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-zinc-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+                  {projectDetail.category}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  {projectDetail.status}
+                </span>
+              </div>
+              <button
+                onClick={() => setProjectDetail(null)}
+                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                aria-label="Close details"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Project name + full description (the card shows only 3 lines of it) */}
+            <h2 className="mt-4 text-xl font-bold text-white">{projectDetail.name}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap">
+              {projectDetail.description || "No description added for this project."}
+            </p>
+
+            {/* Quick facts: documents count and created date */}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Documents indexed</p>
+                <p className="mt-1 text-lg font-semibold text-white">{projectDetail.documents_count}</p>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Created</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {formatDate(projectDetail.created_at) || "-"}
+                </p>
+              </div>
+            </div>
+
+            {/* Source URL (only shown if the project has one).
+                It becomes a clickable link only when it starts with http:// or https://,
+                other text (like s3://bucket) is shown as plain text for safety. */}
+            {projectDetail.source_url && (
+              <div className="mt-5">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Source</p>
+                {/^https?:\/\//i.test(projectDetail.source_url) ? (
+                  <a
+                    href={projectDetail.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 block break-all text-xs font-mono text-indigo-400 underline hover:text-indigo-300"
+                  >
+                    {projectDetail.source_url}
+                  </a>
+                ) : (
+                  <p className="mt-1 break-all text-xs font-mono text-zinc-300">
+                    {projectDetail.source_url}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Tags (only shown if the project has any) */}
+            {Array.isArray(projectDetail.tags) && projectDetail.tags.length > 0 && (
+              <div className="mt-5">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Tags</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {projectDetail.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded border border-zinc-800 bg-zinc-950/60 px-2 py-0.5 text-[11px] font-mono text-zinc-400"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bottom buttons: Close, and open this project in the chat page */}
+            <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+              <button
+                onClick={() => setProjectDetail(null)}
+                className="px-4 py-2 rounded-lg border border-zinc-700 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+              >
+                Close
+              </button>
+              <Link
+                href={`/chat?project=${encodeURIComponent(projectDetail.name)}`}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md"
+              >
+                Open in Copilot &rarr;
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
       {/* ADD PROJECT MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
@@ -625,9 +834,7 @@ export default function ProjectsPage() {
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-white">Create New Project</h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Supabase DB
-                </span>
+
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
@@ -725,10 +932,10 @@ export default function ProjectsPage() {
                   {submitting ? (
                     <>
                       <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      <span>Saving to Supabase...</span>
+                      <span>Saving...</span>
                     </>
                   ) : (
-                    <span>Create & Store Project</span>
+                    <span>Create Project</span>
                   )}
                 </button>
               </div>
@@ -824,7 +1031,7 @@ export default function ProjectsPage() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Remove Project</h3>
-                <p className="text-xs text-zinc-400">This action will delete it from Supabase.</p>
+                <p className="text-xs text-zinc-400">This action cannot be undone.</p>
               </div>
             </div>
 
