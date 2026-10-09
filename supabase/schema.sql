@@ -52,13 +52,14 @@ CREATE POLICY "Allow insert members" ON public.members FOR INSERT WITH CHECK (tr
 CREATE POLICY "Allow update members" ON public.members FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow delete members" ON public.members FOR DELETE USING (true);
 
--- 3. Table: public.tasks (Task Stage, Priority, Member Assignment, Due Date)
+-- 3. Table: public.tasks (Task Stage, Priority, Member Assignment, Due Date, Descriptive Paths)
 CREATE TABLE IF NOT EXISTS public.tasks (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
     project_name TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
+    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     stage TEXT NOT NULL DEFAULT 'todo' CHECK (stage IN ('todo', 'in_progress', 'review', 'done')),
     assigned_to_id TEXT,

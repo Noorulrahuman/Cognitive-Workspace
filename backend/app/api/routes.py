@@ -200,6 +200,7 @@ class TaskBase(BaseModel):
     project_name: str
     title: str = Field(..., min_length=1)
     description: str = Field(default="")
+    descriptive_paths: List[str] = Field(default_factory=list)
     priority: str = Field(default="medium") # low, medium, high, urgent
     stage: str = Field(default="todo")       # todo, in_progress, review, done
     assigned_to_id: Optional[str] = None
@@ -213,6 +214,7 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    descriptive_paths: Optional[List[str]] = None
     priority: Optional[str] = None
     stage: Optional[str] = None
     assigned_to_id: Optional[str] = None
@@ -232,6 +234,11 @@ _TASKS_STORE: List[dict] = [
         "project_name": "Financial Document Intelligence",
         "title": "Implement PyMuPDF 10-K Table Extraction Parser",
         "description": "Extract multi-column tabular balance sheets and income statements into structured JSON chunks.",
+        "descriptive_paths": [
+            "rag-pipeline/extraction/pdf_tables.py",
+            "backend/app/api/parsers/sec_10k.py",
+            "docs/specs/10k_table_schema.json"
+        ],
         "priority": "high",
         "stage": "in_progress",
         "assigned_to_id": "d-003",
@@ -246,6 +253,10 @@ _TASKS_STORE: List[dict] = [
         "project_name": "Financial Document Intelligence",
         "title": "Review LangGraph Multi-Agent Cognitive Loop State",
         "description": "Evaluate graph transition conditions and prevent recursive deadlocks in ratio calculation agent.",
+        "descriptive_paths": [
+            "backend/app/agents/graph_engine.py",
+            "tests/test_agent_deadlock.py"
+        ],
         "priority": "urgent",
         "stage": "review",
         "assigned_to_id": "m-001",
@@ -260,6 +271,10 @@ _TASKS_STORE: List[dict] = [
         "project_name": "Financial Document Intelligence",
         "title": "Unit Test Semantic Chunking Overlap Window",
         "description": "Verify 15% sliding window overlap preserves context boundaries across SEC disclosures.",
+        "descriptive_paths": [
+            "backend/app/services/chunking.py",
+            "tests/fixtures/sec_sample_item7.txt"
+        ],
         "priority": "medium",
         "stage": "done",
         "assigned_to_id": "d-001",
@@ -274,6 +289,10 @@ _TASKS_STORE: List[dict] = [
         "project_name": "Biomedical Literature Search",
         "title": "Configure Supabase pgvector Indexing & HNSW Cosine Distance",
         "description": "Set up m=16 ef_construction=64 on pubmed_abstracts embedding column for sub-50ms latency.",
+        "descriptive_paths": [
+            "supabase/migrations/20261007_pgvector_hnsw.sql",
+            "backend/app/services/vector_store.py"
+        ],
         "priority": "high",
         "stage": "in_progress",
         "assigned_to_id": "d-004",
@@ -288,6 +307,10 @@ _TASKS_STORE: List[dict] = [
         "project_name": "Biomedical Literature Search",
         "title": "Sign-off on RAG Citation Graph Grounding Standards",
         "description": "Approve accuracy metrics and threshold scores for citation claims in biomedical synthesis.",
+        "descriptive_paths": [
+            "docs/standards/grounding_metrics_v2.md",
+            "evals/citation_benchmark_dataset.json"
+        ],
         "priority": "medium",
         "stage": "todo",
         "assigned_to_id": "m-002",
@@ -302,6 +325,10 @@ _TASKS_STORE: List[dict] = [
         "project_name": "Regulatory Web Scraper",
         "title": "Develop Headless Chromium Playwright Session Handler",
         "description": "Handle JS-rendered federal register portal without triggering automated bot challenges.",
+        "descriptive_paths": [
+            "scrapers/playwright_crawler.py",
+            "scrapers/stealth_profile.json"
+        ],
         "priority": "urgent",
         "stage": "in_progress",
         "assigned_to_id": "d-002",

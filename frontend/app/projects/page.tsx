@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -143,6 +144,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     project_name TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
+    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
     stage TEXT NOT NULL DEFAULT 'todo' CHECK (stage IN ('todo', 'in_progress', 'review', 'done')),
     assigned_to_id TEXT,
@@ -173,6 +175,7 @@ CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);`;
 export default function ProjectsPage() {
   const supabase = createClient();
   const { user } = useAuth();
+  const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -593,16 +596,6 @@ export default function ProjectsPage() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <Link
-            href="/tasks"
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span>All Tasks ({tasks.length})</span>
-          </Link>
-
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
@@ -672,11 +665,12 @@ export default function ProjectsPage() {
               return (
                 <div
                   key={project.id}
-                  onClick={() => setProjectDetail(project)}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-5 hover:border-zinc-700 hover:bg-zinc-900/80 transition-all shadow-md cursor-pointer"
+                  onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}/tasks`)}
+                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-5 hover:border-indigo-500/50 hover:bg-zinc-900/80 transition-all shadow-md cursor-pointer"
+                  title="Click to open project tasks workspace"
                 >
                   <div>
-                    {/* Top row: Icon + Category */}
+                    {/* Top row: Icon + Category + Info button */}
                     <div className="flex items-center justify-between gap-3">
                       <div
                         className={`h-10 w-10 rounded-xl bg-linear-to-br ${getProjectColor(
@@ -685,9 +679,23 @@ export default function ProjectsPage() {
                       >
                         {getProjectInitial(project.name)}
                       </div>
-                      <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
-                        {project.category}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+                          {project.category}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProjectDetail(project);
+                          }}
+                          className="p-1 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition"
+                          title="View project metadata"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Title & Description */}
@@ -711,9 +719,9 @@ export default function ProjectsPage() {
                     {/* Tasks pill on Card */}
                     <div className="mt-3.5 flex items-center gap-2">
                       <Link
-                        href={`/tasks?project=${encodeURIComponent(project.name)}`}
+                        href={`/projects/${encodeURIComponent(project.id)}/tasks`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/20 text-[11px] font-mono text-sky-300 transition"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/25 text-[11px] font-mono text-sky-300 transition"
                       >
                         <span>📋 {projectTasks.length} {projectTasks.length === 1 ? "task" : "tasks"}</span>
                         {inProgressCount > 0 && (
@@ -861,10 +869,10 @@ export default function ProjectsPage() {
                     {isInlineAddTaskOpen ? "Close Form" : "+ Add Task"}
                   </button>
                   <Link
-                    href={`/tasks?project=${encodeURIComponent(projectDetail.name)}`}
+                    href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
                     className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
                   >
-                    Open Board &rarr;
+                    Open Project Tasks &rarr;
                   </Link>
                 </div>
               </div>
@@ -1029,10 +1037,10 @@ export default function ProjectsPage() {
                 Close
               </button>
               <Link
-                href={`/tasks?project=${encodeURIComponent(projectDetail.name)}`}
+                href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
                 className="px-4 py-2 rounded-lg border border-sky-500/40 bg-sky-950/30 text-xs font-semibold text-sky-200 hover:bg-sky-900/50 hover:text-white transition"
               >
-                Task Board &rarr;
+                Project Tasks &rarr;
               </Link>
               <Link
                 href={`/chat?project=${encodeURIComponent(projectDetail.name)}`}

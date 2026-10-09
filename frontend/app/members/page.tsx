@@ -10,7 +10,16 @@ import {
   addWorkspaceMember,
   fetchWorkspaceTasks,
   Task,
+  STAGE_CONFIG,
+  PRIORITY_CONFIG,
 } from "@/utils/workspaceData";
+
+function formatDate(iso: string): string {
+  if (!iso) return "No due date";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 export default function MembersPage() {
   const supabase = createClient();
@@ -21,8 +30,9 @@ export default function MembersPage() {
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<"all" | "manager" | "developer">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Add Member Modal State
+  // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [selectedMemberForTasks, setSelectedMemberForTasks] = useState<Member | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -55,18 +65,32 @@ export default function MembersPage() {
     loadData();
   }, [supabase]);
 
-  // Map task counts per member
-  const memberTaskCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
+  // Esc key closes modals
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsAddModalOpen(false);
+        setSelectedMemberForTasks(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Map tasks per member
+  const memberTasksMap = useMemo(() => {
+    const map: Record<string, Task[]> = {};
     for (const t of tasks) {
       if (t.assigned_to_id) {
-        counts[t.assigned_to_id] = (counts[t.assigned_to_id] || 0) + 1;
+        if (!map[t.assigned_to_id]) map[t.assigned_to_id] = [];
+        map[t.assigned_to_id].push(t);
       }
       if (t.assigned_to_name) {
-        counts[t.assigned_to_name] = (counts[t.assigned_to_name] || 0) + 1;
+        if (!map[t.assigned_to_name]) map[t.assigned_to_name] = [];
+        map[t.assigned_to_name].push(t);
       }
     }
-    return counts;
+    return map;
   }, [tasks]);
 
   // Filtered members
@@ -154,6 +178,15 @@ export default function MembersPage() {
     { label: "Sky / Indigo", value: "from-sky-500 to-indigo-500" },
   ];
 
+  const currentMemberTasks = useMemo(() => {
+    if (!selectedMemberForTasks) return [];
+    return (
+      memberTasksMap[selectedMemberForTasks.id] ||
+      memberTasksMap[selectedMemberForTasks.name] ||
+      []
+    );
+  }, [selectedMemberForTasks, memberTasksMap]);
+
   return (
     <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-8">
       {/* Toast */}
@@ -175,19 +208,16 @@ export default function MembersPage() {
             Team Members
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-zinc-400">
-            Collaborative workspace separating leadership managers and technical developers.
+            Click any member name to inspect their read-only assigned task details and progress status.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Link
-            href="/tasks"
+            href="/projects"
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            <span>Task Board</span>
+            <span>&larr; Projects Hub</span>
           </Link>
 
           <button
@@ -295,9 +325,7 @@ export default function MembersPage() {
         </div>
       ) : (
         <div className="mt-8 space-y-10">
-          {/* ============================================================ */}
           {/* SECTION 1: MANAGERS & LEADERSHIP */}
-          {/* ============================================================ */}
           {(selectedRoleFilter === "all" || selectedRoleFilter === "manager") && (
             <div>
               <div className="flex items-center gap-2.5 pb-3 mb-4 border-b border-zinc-800/80">
@@ -317,17 +345,18 @@ export default function MembersPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {managersList.map((member) => {
-                    const taskCount =
-                      memberTaskCounts[member.id] ||
-                      memberTaskCounts[member.name] ||
-                      0;
+                    const assignedTasks =
+                      memberTasksMap[member.id] || memberTasksMap[member.name] || [];
+                    const inProgressTasks = assignedTasks.filter((t) => t.stage === "in_progress").length;
+
                     return (
                       <div
                         key={member.id}
-                        className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 hover:border-amber-500/40 hover:bg-zinc-900/90 transition-all shadow-md"
+                        onClick={() => setSelectedMemberForTasks(member)}
+                        className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 hover:border-amber-500/50 hover:bg-zinc-900/95 transition-all shadow-md cursor-pointer"
+                        title="Click to view assigned tasks and status details"
                       >
                         <div>
-                          {/* Top Row: Avatar + Status + Role badge */}
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3">
                               <div className="relative">
@@ -352,8 +381,8 @@ export default function MembersPage() {
                               </div>
 
                               <div>
-                                <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">
-                                  {member.name}
+                                <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
+                                  <span>{member.name}</span>
                                 </h3>
                                 <p className="text-xs text-zinc-400">{member.role_title}</p>
                               </div>
@@ -364,7 +393,6 @@ export default function MembersPage() {
                             </span>
                           </div>
 
-                          {/* Email & Department */}
                           <div className="mt-4 space-y-1 text-xs font-mono text-zinc-400">
                             <div className="flex items-center gap-1.5 truncate">
                               <span className="text-zinc-500">Email:</span>
@@ -376,10 +404,9 @@ export default function MembersPage() {
                             </div>
                           </div>
 
-                          {/* Skills */}
                           <div className="mt-4">
                             <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
-                              Leadership & Domain
+                              Leadership Domain
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               {member.skills.map((s) => (
@@ -394,18 +421,19 @@ export default function MembersPage() {
                           </div>
                         </div>
 
-                        {/* Bottom stats & Action */}
-                        <div className="mt-5 pt-4 border-t border-zinc-800/80 flex items-center justify-between">
-                          <div className="text-xs font-mono text-zinc-400">
-                            <span className="text-white font-bold">{taskCount}</span>{" "}
-                            {taskCount === 1 ? "task" : "tasks"} assigned
-                          </div>
-                          <Link
-                            href={`/tasks?assignee=${encodeURIComponent(member.name)}`}
-                            className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-800/80 hover:bg-amber-600 hover:text-white text-[11px] font-semibold text-zinc-300 transition"
-                          >
-                            Tasks &rarr;
-                          </Link>
+                        {/* Bottom Bar: Read-only Task Status Indicator */}
+                        <div className="mt-5 pt-3.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+                          <span className="text-zinc-400">
+                            <strong className="text-white font-bold">{assignedTasks.length}</strong> tasks assigned
+                            {inProgressTasks > 0 && (
+                              <span className="ml-1 text-amber-300 text-[10px]">({inProgressTasks} active)</span>
+                            )}
+                          </span>
+
+                          <span className="text-[11px] font-semibold text-amber-400 group-hover:underline flex items-center gap-1">
+                            <span>View Task Status</span>
+                            <span>&rarr;</span>
+                          </span>
                         </div>
                       </div>
                     );
@@ -415,9 +443,7 @@ export default function MembersPage() {
             </div>
           )}
 
-          {/* ============================================================ */}
           {/* SECTION 2: DEVELOPERS & ENGINEERS */}
-          {/* ============================================================ */}
           {(selectedRoleFilter === "all" || selectedRoleFilter === "developer") && (
             <div>
               <div className="flex items-center gap-2.5 pb-3 mb-4 border-b border-zinc-800/80">
@@ -437,17 +463,18 @@ export default function MembersPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {developersList.map((member) => {
-                    const taskCount =
-                      memberTaskCounts[member.id] ||
-                      memberTaskCounts[member.name] ||
-                      0;
+                    const assignedTasks =
+                      memberTasksMap[member.id] || memberTasksMap[member.name] || [];
+                    const inProgressTasks = assignedTasks.filter((t) => t.stage === "in_progress").length;
+
                     return (
                       <div
                         key={member.id}
-                        className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 hover:border-sky-500/40 hover:bg-zinc-900/90 transition-all shadow-md"
+                        onClick={() => setSelectedMemberForTasks(member)}
+                        className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 hover:border-sky-500/50 hover:bg-zinc-900/95 transition-all shadow-md cursor-pointer"
+                        title="Click to view assigned tasks and status details"
                       >
                         <div>
-                          {/* Top Row: Avatar + Status + Role badge */}
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3">
                               <div className="relative">
@@ -472,8 +499,8 @@ export default function MembersPage() {
                               </div>
 
                               <div>
-                                <h3 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
-                                  {member.name}
+                                <h3 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors flex items-center gap-1.5">
+                                  <span>{member.name}</span>
                                 </h3>
                                 <p className="text-xs text-zinc-400">{member.role_title}</p>
                               </div>
@@ -484,7 +511,6 @@ export default function MembersPage() {
                             </span>
                           </div>
 
-                          {/* Email & Department */}
                           <div className="mt-4 space-y-1 text-xs font-mono text-zinc-400">
                             <div className="flex items-center gap-1.5 truncate">
                               <span className="text-zinc-500">Email:</span>
@@ -496,10 +522,9 @@ export default function MembersPage() {
                             </div>
                           </div>
 
-                          {/* Skills */}
                           <div className="mt-4">
                             <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
-                              Tech Stack & Frameworks
+                              Tech Stack & Modules
                             </p>
                             <div className="flex flex-wrap gap-1.5">
                               {member.skills.map((s) => (
@@ -514,18 +539,19 @@ export default function MembersPage() {
                           </div>
                         </div>
 
-                        {/* Bottom stats & Action */}
-                        <div className="mt-5 pt-4 border-t border-zinc-800/80 flex items-center justify-between">
-                          <div className="text-xs font-mono text-zinc-400">
-                            <span className="text-white font-bold">{taskCount}</span>{" "}
-                            {taskCount === 1 ? "task" : "tasks"} assigned
-                          </div>
-                          <Link
-                            href={`/tasks?assignee=${encodeURIComponent(member.name)}`}
-                            className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-800/80 hover:bg-sky-600 hover:text-white text-[11px] font-semibold text-zinc-300 transition"
-                          >
-                            Tasks &rarr;
-                          </Link>
+                        {/* Bottom Bar: Read-only Task Status Indicator */}
+                        <div className="mt-5 pt-3.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+                          <span className="text-zinc-400">
+                            <strong className="text-white font-bold">{assignedTasks.length}</strong> tasks assigned
+                            {inProgressTasks > 0 && (
+                              <span className="ml-1 text-sky-300 text-[10px]">({inProgressTasks} active)</span>
+                            )}
+                          </span>
+
+                          <span className="text-[11px] font-semibold text-sky-400 group-hover:underline flex items-center gap-1">
+                            <span>View Task Status</span>
+                            <span>&rarr;</span>
+                          </span>
                         </div>
                       </div>
                     );
@@ -534,6 +560,159 @@ export default function MembersPage() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* VIEW-ONLY MODAL: TASK DETAILS FOR MEMBER (ON CLICKING NAME) */}
+      {/* ============================================================ */}
+      {selectedMemberForTasks && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4"
+          onClick={() => setSelectedMemberForTasks(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Tasks assigned to ${selectedMemberForTasks.name}`}
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header: Member Profile */}
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`h-12 w-12 rounded-xl bg-linear-to-tr ${selectedMemberForTasks.avatar_color} flex items-center justify-center text-sm font-bold text-white shadow-md`}
+                >
+                  {selectedMemberForTasks.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-white">{selectedMemberForTasks.name}</h2>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        selectedMemberForTasks.role_type === "manager"
+                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                          : "border-sky-500/30 bg-sky-500/10 text-sky-300"
+                      }`}
+                    >
+                      {selectedMemberForTasks.role_type === "manager" ? "Manager / Lead" : "Developer"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400">{selectedMemberForTasks.role_title} &bull; {selectedMemberForTasks.department}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedMemberForTasks(null)}
+                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Subheader banner */}
+            <div className="mt-4 flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-950/70 text-xs font-mono">
+              <div className="flex items-center gap-2 text-zinc-300">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Assigned Task Portfolio (View-Only)</span>
+              </div>
+              <span className="text-zinc-400">
+                {currentMemberTasks.length} {currentMemberTasks.length === 1 ? "task" : "tasks"} on record
+              </span>
+            </div>
+
+            {/* List View of Tasks */}
+            <div className="mt-4 space-y-3">
+              {currentMemberTasks.length === 0 ? (
+                <div className="py-12 text-center text-zinc-500 text-xs font-mono border border-dashed border-zinc-800 rounded-xl">
+                  No active tasks currently assigned to {selectedMemberForTasks.name}.
+                </div>
+              ) : (
+                currentMemberTasks.map((t) => {
+                  const stageConf = STAGE_CONFIG[t.stage];
+                  const priorityConf = PRIORITY_CONFIG[t.priority] || PRIORITY_CONFIG.medium;
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/60 space-y-2.5"
+                    >
+                      {/* Top Row: Title + Project + Stage */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-indigo-400 block mb-0.5">
+                            {t.project_name}
+                          </span>
+                          <h4 className="text-xs sm:text-sm font-bold text-white">
+                            {t.title}
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`rounded-md border px-2 py-0.5 text-[10px] font-mono ${stageConf.badge}`}
+                          >
+                            Status: {stageConf.label}
+                          </span>
+                          <span
+                            className={`rounded-md border px-2 py-0.5 text-[10px] font-mono ${priorityConf.badge}`}
+                          >
+                            {priorityConf.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        {t.description}
+                      </p>
+
+                      {/* Descriptive Paths Box (Read-only) */}
+                      {t.descriptive_paths && t.descriptive_paths.length > 0 && (
+                        <div className="pt-2 border-t border-zinc-850">
+                          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
+                            Descriptive Implementation Paths & Targets:
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {t.descriptive_paths.map((p) => (
+                              <span
+                                key={p}
+                                className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-emerald-400/90"
+                              >
+                                {p}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Due Date */}
+                      <div className="pt-2 border-t border-zinc-850 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                        <span>Due Date: <strong className="text-zinc-200">{formatDate(t.due_date)}</strong></span>
+                        <span className="text-zinc-500">ID: {t.id}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Bottom Done button */}
+            <div className="mt-6 pt-3 border-t border-zinc-800 flex justify-end">
+              <button
+                onClick={() => setSelectedMemberForTasks(null)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white cursor-pointer"
+              >
+                Close View
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -572,7 +751,6 @@ export default function MembersPage() {
             </div>
 
             <form onSubmit={handleAddMember} className="mt-4 space-y-4">
-              {/* Role Type: Manager vs Developer */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
                   Role Classification *
@@ -604,7 +782,6 @@ export default function MembersPage() {
                 </div>
               </div>
 
-              {/* Full Name & Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
@@ -635,7 +812,6 @@ export default function MembersPage() {
                 </div>
               </div>
 
-              {/* Role Title & Department */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
@@ -668,7 +844,6 @@ export default function MembersPage() {
                 </div>
               </div>
 
-              {/* Skills */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
                   Skills & Expertise (comma separated)
@@ -682,7 +857,6 @@ export default function MembersPage() {
                 />
               </div>
 
-              {/* Avatar Color Theme */}
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
                   Avatar Theme
@@ -700,7 +874,6 @@ export default function MembersPage() {
                 </select>
               </div>
 
-              {/* Buttons */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
                 <button
                   type="button"
