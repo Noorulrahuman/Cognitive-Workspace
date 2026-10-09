@@ -1,21 +1,34 @@
-"use client";
+"use client"; // Runs in the browser (needed for hooks like usePathname / useEffect)
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
+/* ==========================================================================
+ * Navbar: the top bar shown on every page (added in app/layout.tsx).
+ *
+ * Left side  : brand (gold "COGNITIVE WORKSPACE" text) + page links
+ * Right side : backend status pill + login state (Sign In / user + Sign Out)
+ * Mobile     : the page links move to a second row below the bar
+ * ========================================================================== */
+
+// Backend base URL. Comes from .env.local (NEXT_PUBLIC_API_URL).
+// Falls back to localhost so local development works without any setup.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 type BackendStatus = "online" | "offline" | "checking";
 
+// Links shown in the navbar (both desktop and mobile use this one list).
+// To add a new page link, add one line here. The page itself must already exist.
 const NAV_ITEMS = [
   { name: "Overview", href: "/" },
   { name: "Projects", href: "/projects" },
   { name: "Requirements", href: "/requirements" },
-  { name: "Gemini AI", href: "/chat" },
+  { name: "Gemini", href: "/chat" }, // renamed from "gemini ai", same /chat page
 ];
 
+// Dot color, text color and label for each backend status
 const STATUS_STYLES: Record<
   BackendStatus,
   { dot: string; text: string; label: string }
@@ -29,11 +42,14 @@ const STATUS_STYLES: Record<
   offline: { dot: "bg-red-400", text: "text-red-400", label: "Offline" },
 };
 
+// Is this nav link the current page?
+// "/" must match exactly, other links also match their sub-pages (/projects/123)
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+// "Prem Kumar" -> "PK", "prem" -> "PR"
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/);
   const letters =
@@ -41,16 +57,18 @@ function getInitials(name: string) {
   return letters.toUpperCase() || "CW";
 }
 
+// Custom hook: checks the backend health every 10 seconds
+// and returns "checking" / "online" / "offline"
 function useBackendStatus(intervalMs = 10000): BackendStatus {
   const [status, setStatus] = useState<BackendStatus>("checking");
 
   useEffect(() => {
-    let isMounted = true;
+    let isMounted = true; // prevents updating state after the component is gone
 
     async function check() {
-      if (document.hidden) return; // tab background-la irundha skip
+      if (document.hidden) return; // tab is in the background: skip the request
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), 4000); // give up after 4 seconds
       try {
         const res = await fetch(`${API_URL}/api/v1/health`, {
           cache: "no-store",
@@ -64,13 +82,15 @@ function useBackendStatus(intervalMs = 10000): BackendStatus {
       }
     }
 
-    check();
-    const id = setInterval(check, intervalMs);
+    check(); // first check immediately
+    const id = setInterval(check, intervalMs); // then repeat
+    // When the user comes back to this tab, check again right away
     const onVisible = () => {
       if (!document.hidden) check();
     };
     document.addEventListener("visibilitychange", onVisible);
 
+    // Cleanup when the navbar is removed
     return () => {
       isMounted = false;
       clearInterval(id);
@@ -82,15 +102,17 @@ function useBackendStatus(intervalMs = 10000): BackendStatus {
 }
 
 export default function Navbar() {
-  const pathname = usePathname();
+  const pathname = usePathname(); // current page URL, e.g. "/projects"
   const router = useRouter();
-  const { user, signOut, isLoading: authLoading } = useAuth();
+  const { user, signOut, isLoading: authLoading } = useAuth(); // login info from AuthProvider
   const backendStatus = useBackendStatus();
   const statusStyle = STATUS_STYLES[backendStatus];
 
+  // Name shown next to the avatar: full name, else the part of the email before "@"
   const userDisplayName =
     user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
 
+  // Sign out, then go to the login page
   const handleSignOut = async () => {
     await signOut();
     router.push("/login");
@@ -100,15 +122,25 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-4 sm:px-8 py-3">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
-        {/* Brand + desktop links */}
+        {/* ===== LEFT: brand + desktop links ===== */}
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="h-3 w-3 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-            <span className="font-mono text-sm font-bold tracking-wider uppercase text-zinc-200 group-hover:text-white transition-colors">
+            {/* Gold glowing dot next to the brand name (was green before) */}
+            <div className="h-3 w-3 rounded-full bg-amber-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_10px_rgba(251,191,36,0.7)]" />
+
+            {/* GOLD BRAND TEXT. How it works:
+                - bg-linear-to-r from-... via-... to-... : gold gradient (dark gold, light gold, dark gold)
+                - bg-[length:200%_auto]                  : gradient is 2x wider than the text, so it can slide
+                - bg-clip-text + text-transparent        : the gradient shows only inside the letters
+                - animate-gold-shimmer                   : slides the light spot (defined in globals.css)
+                - drop-shadow-[...]                      : soft golden glow, stronger on hover
+                To change the color: swap amber / yellow for another Tailwind color. */}
+            <span className="font-mono text-sm font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] group-hover:drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] transition-all duration-300">
               Cognitive Workspace
             </span>
           </Link>
 
+          {/* Page links (hidden on mobile, shown from tablet size up) */}
           <nav aria-label="Main" className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map((item) => {
               const active = isActivePath(pathname, item.href);
@@ -116,7 +148,7 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  aria-current={active ? "page" : undefined}
+                  aria-current={active ? "page" : undefined} // tells screen readers which page is open
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                     active
                       ? "bg-zinc-800 text-white shadow-xs"
@@ -130,8 +162,9 @@ export default function Navbar() {
           </nav>
         </div>
 
-        {/* Right side: status + auth */}
+        {/* ===== RIGHT: backend status + login state ===== */}
         <div className="flex items-center gap-3">
+          {/* Backend status pill: "API: Online / Offline" */}
           <div
             role="status"
             aria-live="polite"
@@ -142,9 +175,12 @@ export default function Navbar() {
             <span className={statusStyle.text}>{statusStyle.label}</span>
           </div>
 
+          {/* Three possible states: loading / logged in / logged out */}
           {authLoading ? (
+            // 1. Still checking login: grey blinking box (avoids layout jump)
             <div className="h-8 w-28 animate-pulse rounded-lg bg-zinc-900" />
           ) : user ? (
+            // 2. Logged in: avatar + name + Sign Out button
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/90 text-xs">
                 <div className="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
@@ -163,6 +199,7 @@ export default function Navbar() {
               </button>
             </div>
           ) : (
+            // 3. Logged out: Sign In + Register buttons (both open /login)
             <div className="flex items-center gap-2">
               <Link
                 href="/login"
@@ -185,7 +222,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile nav strip */}
+      {/* ===== MOBILE: second row with the page links (hidden from tablet size up) ===== */}
       <nav
         aria-label="Mobile"
         className="flex md:hidden items-center justify-around mt-2 pt-2 border-t border-zinc-800/60"
