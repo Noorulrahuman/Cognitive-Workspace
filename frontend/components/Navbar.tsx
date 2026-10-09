@@ -1,34 +1,31 @@
-"use client"; // Runs in the browser (needed for hooks like usePathname / useEffect)
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
 
 /* ==========================================================================
- * Navbar: the top bar shown on every page (added in app/layout.tsx).
+ * Navbar: Industry-grade Top Navigation Bar
  *
- * Left side  : brand (gold "COGNITIVE WORKSPACE" text) + page links
- * Right side : backend status pill + login state (Sign In / user + Sign Out)
- * Mobile     : the page links move to a second row below the bar
+ * Left side  : Gold glowing brand + main navigation links
+ *              (Requirements replaced with Members & Tasks; Copilot renamed to Gemini)
+ * Right side : Bundled top-right menu trigger (Menu Icon + User Profile)
+ *              Once clicked, reveals Profile, Sign In / Sign Out, Settings,
+ *              API & Database health, and quick workspace shortcuts.
  * ========================================================================== */
 
-// Backend base URL. Comes from .env.local (NEXT_PUBLIC_API_URL).
-// Falls back to localhost so local development works without any setup.
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 type BackendStatus = "online" | "offline" | "checking";
 
-// Links shown in the navbar (both desktop and mobile use this one list).
-// To add a new page link, add one line here. The page itself must already exist.
 const NAV_ITEMS = [
   { name: "Overview", href: "/" },
   { name: "Projects", href: "/projects" },
-  { name: "Requirements", href: "/requirements" },
-  { name: "Gemini", href: "/chat" }, // renamed from "gemini ai", same /chat page
+  { name: "Members", href: "/members" },
+  { name: "Gemini", href: "/chat" },
 ];
 
-// Dot color, text color and label for each backend status
 const STATUS_STYLES: Record<
   BackendStatus,
   { dot: string; text: string; label: string }
@@ -36,20 +33,17 @@ const STATUS_STYLES: Record<
   online: {
     dot: "bg-emerald-400 animate-pulse",
     text: "text-emerald-400 font-semibold",
-    label: "Online",
+    label: "Online (Healthy)",
   },
-  checking: { dot: "bg-yellow-400", text: "text-yellow-400", label: "..." },
-  offline: { dot: "bg-red-400", text: "text-red-400", label: "Offline" },
+  checking: { dot: "bg-yellow-400", text: "text-yellow-400", label: "Checking..." },
+  offline: { dot: "bg-red-400", text: "text-red-400", label: "Offline (Local Cache)" },
 };
 
-// Is this nav link the current page?
-// "/" must match exactly, other links also match their sub-pages (/projects/123)
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-// "Prem Kumar" -> "PK", "prem" -> "PR"
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/);
   const letters =
@@ -57,18 +51,16 @@ function getInitials(name: string) {
   return letters.toUpperCase() || "CW";
 }
 
-// Custom hook: checks the backend health every 10 seconds
-// and returns "checking" / "online" / "offline"
-function useBackendStatus(intervalMs = 10000): BackendStatus {
+function useBackendStatus(intervalMs = 15000): BackendStatus {
   const [status, setStatus] = useState<BackendStatus>("checking");
 
   useEffect(() => {
-    let isMounted = true; // prevents updating state after the component is gone
+    let isMounted = true;
 
     async function check() {
-      if (document.hidden) return; // tab is in the background: skip the request
+      if (document.hidden) return;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000); // give up after 4 seconds
+      const timeout = setTimeout(() => controller.abort(), 4000);
       try {
         const res = await fetch(`${API_URL}/api/v1/health`, {
           cache: "no-store",
@@ -82,15 +74,13 @@ function useBackendStatus(intervalMs = 10000): BackendStatus {
       }
     }
 
-    check(); // first check immediately
-    const id = setInterval(check, intervalMs); // then repeat
-    // When the user comes back to this tab, check again right away
+    check();
+    const id = setInterval(check, intervalMs);
     const onVisible = () => {
       if (!document.hidden) check();
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    // Cleanup when the navbar is removed
     return () => {
       isMounted = false;
       clearInterval(id);
@@ -102,45 +92,69 @@ function useBackendStatus(intervalMs = 10000): BackendStatus {
 }
 
 export default function Navbar() {
-  const pathname = usePathname(); // current page URL, e.g. "/projects"
+  const pathname = usePathname();
   const router = useRouter();
-  const { user, signOut, isLoading: authLoading } = useAuth(); // login info from AuthProvider
+  const { user, signOut, isLoading: authLoading } = useAuth();
   const backendStatus = useBackendStatus();
   const statusStyle = STATUS_STYLES[backendStatus];
 
-  // Name shown next to the avatar: full name, else the part of the email before "@"
-  const userDisplayName =
-    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+  // Bundled menu state
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<"menu" | "settings">("menu");
+  const [accentTheme, setAccentTheme] = useState<string>("indigo");
+  const [soundAlerts, setSoundAlerts] = useState<boolean>(true);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Sign out, then go to the login page
+  const userDisplayName =
+    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Workspace Member";
+  const userEmail = user?.email || "guest@cognitive-workspace.local";
+
   const handleSignOut = async () => {
+    setIsMenuOpen(false);
     await signOut();
     router.push("/login");
     router.refresh();
   };
 
+  // Close menu on click outside or Esc
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsMenuOpen(false);
+    };
+
+    if (isMenuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+      document.addEventListener("keydown", handleEsc);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [isMenuOpen]);
+
+  // Close menu when route changes
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [pathname]);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md px-4 sm:px-8 py-3">
+    <header className="sticky top-0 z-50 border-b border-zinc-800/80 bg-zinc-950/85 backdrop-blur-md px-4 sm:px-8 py-3 transition-colors">
       <div className="mx-auto flex max-w-7xl items-center justify-between">
-        {/* ===== LEFT: brand + desktop links ===== */}
+        {/* ===== LEFT: Brand + Main Links ===== */}
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2.5 group">
-            {/* Gold glowing dot next to the brand name (was green before) */}
             <div className="h-3 w-3 rounded-full bg-amber-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_10px_rgba(251,191,36,0.7)]" />
-
-            {/* GOLD BRAND TEXT. How it works:
-                - bg-linear-to-r from-... via-... to-... : gold gradient (dark gold, light gold, dark gold)
-                - bg-[length:200%_auto]                  : gradient is 2x wider than the text, so it can slide
-                - bg-clip-text + text-transparent        : the gradient shows only inside the letters
-                - animate-gold-shimmer                   : slides the light spot (defined in globals.css)
-                - drop-shadow-[...]                      : soft golden glow, stronger on hover
-                To change the color: swap amber / yellow for another Tailwind color. */}
             <span className="font-mono text-sm font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] group-hover:drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] transition-all duration-300">
               Cognitive Workspace
             </span>
           </Link>
 
-          {/* Page links (hidden on mobile, shown from tablet size up) */}
+          {/* Desktop Links */}
           <nav aria-label="Main" className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map((item) => {
               const active = isActivePath(pathname, item.href);
@@ -148,10 +162,10 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  aria-current={active ? "page" : undefined} // tells screen readers which page is open
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  aria-current={active ? "page" : undefined}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                     active
-                      ? "bg-zinc-800 text-white shadow-xs"
+                      ? "bg-zinc-800 text-white shadow-xs font-semibold"
                       : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
                   }`}
                 >
@@ -162,70 +176,289 @@ export default function Navbar() {
           </nav>
         </div>
 
-        {/* ===== RIGHT: backend status + login state ===== */}
-        <div className="flex items-center gap-3">
-          {/* Backend status pill: "API: Online / Offline" */}
-          <div
-            role="status"
-            aria-live="polite"
-            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-800 bg-zinc-900/80 text-[11px] font-mono"
+        {/* ===== RIGHT: Bundled Menu (Menu Icon + User Profile on normal state) ===== */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-expanded={isMenuOpen}
+            aria-label="Open Workspace Menu & Settings"
+            className={`group flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-full border transition-all cursor-pointer ${
+              isMenuOpen
+                ? "border-indigo-500/60 bg-zinc-800/90 text-white ring-2 ring-indigo-500/20"
+                : "border-zinc-800 bg-zinc-900/90 hover:border-zinc-700 hover:bg-zinc-850 text-zinc-300"
+            }`}
           >
-            <span className={`h-2 w-2 rounded-full ${statusStyle.dot}`} />
-            <span className="text-zinc-400">API:</span>
-            <span className={statusStyle.text}>{statusStyle.label}</span>
-          </div>
-
-          {/* Three possible states: loading / logged in / logged out */}
-          {authLoading ? (
-            // 1. Still checking login: grey blinking box (avoids layout jump)
-            <div className="h-8 w-28 animate-pulse rounded-lg bg-zinc-900" />
-          ) : user ? (
-            // 2. Logged in: avatar + name + Sign Out button
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900/90 text-xs">
-                <div className="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">
-                  {getInitials(userDisplayName)}
-                </div>
-                <span className="hidden lg:inline text-zinc-300 font-medium text-xs max-w-[130px] truncate">
-                  {userDisplayName}
-                </span>
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="px-2.5 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-all cursor-pointer"
-                title="Sign out"
+            {/* 1. Menu Icon */}
+            <div className="flex flex-col justify-center items-center w-4 h-4 text-zinc-400 group-hover:text-zinc-100 transition-colors">
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
               >
-                Sign Out
-              </button>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </div>
-          ) : (
-            // 3. Logged out: Sign In + Register buttons (both open /login)
+
+            {/* Subtle Divider */}
+            <div className="w-[1px] h-4 bg-zinc-800" />
+
+            {/* 2. User Profile on normal */}
             <div className="flex items-center gap-2">
-              <Link
-                href="/login"
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  pathname === "/login"
-                    ? "bg-zinc-800 text-white"
-                    : "text-zinc-300 hover:text-white hover:bg-zinc-900 border border-zinc-800"
+              <div className="relative">
+                <div className="h-7 w-7 rounded-full bg-linear-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-[11px] font-bold text-white shadow-xs">
+                  {user ? getInitials(userDisplayName) : "CW"}
+                </div>
+                <span
+                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 ${
+                    user ? "bg-emerald-400" : "bg-zinc-500"
+                  }`}
+                />
+              </div>
+
+              <span className="hidden sm:inline-block text-xs font-medium text-zinc-200 max-w-[110px] truncate">
+                {user ? userDisplayName : "Guest Member"}
+              </span>
+
+              {/* Chevron */}
+              <svg
+                className={`w-3.5 h-3.5 text-zinc-400 transition-transform duration-200 ${
+                  isMenuOpen ? "rotate-180 text-indigo-400" : ""
                 }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                Sign In
-              </Link>
-              <Link
-                href="/login?tab=register"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/20 transition-all active:scale-95"
-              >
-                Register
-              </Link>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          {/* ===== BUNDLED DROPDOWN MENU (Once clicked, reveals everything) ===== */}
+          {isMenuOpen && (
+            <div className="absolute right-0 mt-2.5 w-84 sm:w-96 rounded-2xl border border-zinc-800 bg-zinc-900/95 backdrop-blur-xl p-4 shadow-2xl z-50 animate-scale-up text-zinc-100">
+              {/* Header: User Profile Info */}
+              <div className="flex items-start gap-3 pb-3 border-b border-zinc-800/80">
+                <div className="h-11 w-11 rounded-full bg-linear-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center text-sm font-bold text-white shadow-md">
+                  {user ? getInitials(userDisplayName) : "CW"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-white truncate">
+                      {user ? userDisplayName : "Guest Member"}
+                    </p>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300">
+                      {user ? "Authenticated" : "Preview"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 font-mono truncate">{userEmail}</p>
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Workspace Active</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs: Navigation vs Settings */}
+              <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-zinc-950 p-1 border border-zinc-800 text-xs">
+                <button
+                  onClick={() => setActiveTab("menu")}
+                  className={`py-1.5 rounded-md font-medium transition cursor-pointer ${
+                    activeTab === "menu"
+                      ? "bg-zinc-800 text-white shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Workspace Menu
+                </button>
+                <button
+                  onClick={() => setActiveTab("settings")}
+                  className={`py-1.5 rounded-md font-medium transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeTab === "settings"
+                      ? "bg-zinc-800 text-white shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Settings</span>
+                </button>
+              </div>
+
+              {/* TAB 1: WORKSPACE MENU */}
+              {activeTab === "menu" && (
+                <div className="mt-3 space-y-1">
+                  <p className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                    Quick Navigation
+                  </p>
+                  <Link
+                    href="/"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+                  >
+                    <span>Overview & Home</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">&rarr;</span>
+                  </Link>
+                  <Link
+                    href="/projects"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+                  >
+                    <span>Projects & Tasks</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">&rarr;</span>
+                  </Link>
+                  <Link
+                    href="/members"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>Team Members</span>
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-mono text-emerald-300">
+                        Managers & Devs
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 font-mono">&rarr;</span>
+                  </Link>
+                  <Link
+                    href="/chat"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>Gemini Workspace</span>
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-mono text-amber-300">
+                        AI
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500 font-mono">&rarr;</span>
+                  </Link>
+                </div>
+              )}
+
+              {/* TAB 2: SETTINGS */}
+              {activeTab === "settings" && (
+                <div className="mt-3 space-y-3 text-xs">
+                  {/* System Health */}
+                  <div className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/70">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-2">
+                      System & Cloud Connectivity
+                    </p>
+                    <div className="flex items-center justify-between py-1 border-b border-zinc-850">
+                      <span className="text-zinc-400">FastAPI Backend:</span>
+                      <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                        <span className={`h-2 w-2 rounded-full ${statusStyle.dot}`} />
+                        <span className={statusStyle.text}>{statusStyle.label}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between py-1 mt-1">
+                      <span className="text-zinc-400">Database Engine:</span>
+                      <span className="text-zinc-200 font-mono text-[11px] flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        Supabase pgvector
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Accent Theme */}
+                  <div className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/70">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-2">
+                      Workspace Accent Theme
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: "indigo", label: "Indigo", color: "bg-indigo-500" },
+                        { id: "emerald", label: "Emerald", color: "bg-emerald-500" },
+                        { id: "amber", label: "Amber", color: "bg-amber-500" },
+                      ].map((theme) => (
+                        <button
+                          key={theme.id}
+                          onClick={() => setAccentTheme(theme.id)}
+                          className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-xs cursor-pointer transition ${
+                            accentTheme === theme.id
+                              ? "border-white/40 bg-zinc-800 text-white font-semibold"
+                              : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
+                          }`}
+                        >
+                          <span className={`h-2 w-2 rounded-full ${theme.color}`} />
+                          <span>{theme.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Sound & Notifications */}
+                  <div className="flex items-center justify-between px-1 py-1 text-zinc-300">
+                    <span>Task Update Sounds</span>
+                    <button
+                      onClick={() => setSoundAlerts(!soundAlerts)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                        soundAlerts ? "bg-indigo-600" : "bg-zinc-800"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 ease-in-out ${
+                          soundAlerts ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Actions: Sign In / Register / Sign Out */}
+              <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-2">
+                {user ? (
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-rose-900/40 bg-rose-950/20 hover:bg-rose-900/40 text-xs font-semibold text-rose-300 transition cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
+                    </svg>
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <Link
+                      href="/login"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center justify-center py-2 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition text-center"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/login?tab=register"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="flex items-center justify-center py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/25 transition text-center"
+                    >
+                      Register
+                    </Link>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ===== MOBILE: second row with the page links (hidden from tablet size up) ===== */}
+      {/* ===== MOBILE: Navigation Row ===== */}
       <nav
-        aria-label="Mobile"
-        className="flex md:hidden items-center justify-around mt-2 pt-2 border-t border-zinc-800/60"
+        aria-label="Mobile Navigation"
+        className="flex md:hidden items-center justify-around mt-2.5 pt-2 border-t border-zinc-800/60"
       >
         {NAV_ITEMS.map((item) => {
           const active = isActivePath(pathname, item.href);
@@ -234,7 +467,7 @@ export default function Navbar() {
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
-              className={`px-2 py-1 text-xs font-medium rounded ${
+              className={`px-2 py-1 text-xs font-medium rounded transition ${
                 active
                   ? "text-indigo-400 font-semibold"
                   : "text-zinc-400 hover:text-zinc-200"

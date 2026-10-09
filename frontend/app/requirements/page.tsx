@@ -448,7 +448,7 @@ export default function RequirementsPage() {
               ✓ Ingestion Simulation Completed Successfully
             </h4>
             <p className="text-zinc-300">
-              Target extracted <span className="text-white font-mono break-all">{sampleUrl}</span> &bull; 14 semantic chunks generated &bull; Normalized 2 data tables &bull; Ready for LangGraph Copilot reasoning.
+              Target extracted <span className="text-white font-mono break-all">{sampleUrl}</span> &bull; 14 semantic chunks generated &bull; Normalized 2 data tables &bull; Ready for LangGraph Gemini reasoning.
             </p>
             <div className="mt-3 flex gap-2">
               {/* Goes to the chat page */}
@@ -456,7 +456,7 @@ export default function RequirementsPage() {
                 href="/chat"
                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold"
               >
-                Query Ingested Docs in Copilot &rarr;
+                Query Ingested Docs in Gemini &rarr;
               </Link>
             </div>
           </div>
