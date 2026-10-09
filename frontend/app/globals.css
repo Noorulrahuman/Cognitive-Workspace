@@ -1,11 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
+  --background: #181818;
   --foreground: #ededed;
   color-scheme: dark;
 }
 
+/* Connects Tailwind classes (font-mono, bg-background...) to our variables */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -21,15 +22,18 @@ body {
   padding: 0;
 }
 
+/* Smooth scrolling when clicking anchor links */
 html {
   scroll-behavior: smooth;
 }
 
+/* Visible focus ring when navigating with the keyboard (Tab key) */
 :focus-visible {
   outline: 2px solid #818cf8;
   outline-offset: 2px;
 }
 
+/* ---------- Animations (used by toasts and modals on the Projects page) ---------- */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -42,3 +46,21 @@ html {
 
 .animate-fade-in  { animation: fade-in 0.25s ease-out; }
 .animate-scale-up { animation: scale-up 0.2s ease-out; }
+
+/* ---------- Gold shine (used by the navbar brand text) ----------
+ * The gradient is 2x wider than the text (bg-[length:200%_auto] in Navbar.tsx).
+ * Moving background-position from left to right makes the light spot slide
+ * across the letters. "alternate" plays it back and forth smoothly. */
+@keyframes gold-shimmer {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+
+.animate-gold-shimmer {
+  animation: gold-shimmer 3s ease-in-out infinite alternate;
+}
+
+/* Accessibility: users who turned off animations in their OS see a still gold text */
+@media (prefers-reduced-motion: reduce) {
+  .animate-gold-shimmer { animation: none; }
+}
