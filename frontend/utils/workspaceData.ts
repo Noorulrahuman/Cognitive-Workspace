@@ -33,12 +33,13 @@ export interface Task {
   project_name: string;
   title: string;
   description: string;
+  descriptive_paths?: string[]; // List of descriptive file / workflow / API paths
   priority: TaskPriority;
-  stage: TaskStage;          // "stage where its now"
+  stage: TaskStage;             // Stage where it is now (todo, in_progress, review, done)
   assigned_to_id: string | null;
   assigned_to_name: string | null;
   assigned_to_role: string | null;
-  due_date: string;          // ISO Date string YYYY-MM-DD
+  due_date: string;             // ISO Date string YYYY-MM-DD
   created_at: string;
   updated_at?: string;
 }
@@ -145,12 +146,18 @@ export const DEFAULT_MEMBERS: Member[] = [
 ];
 
 export const DEFAULT_TASKS: Task[] = [
+  // --- PROJECT 1: Financial Document Intelligence ---
   {
     id: "task-001",
     project_id: "d1a1b1c1-1111-4000-8000-000000000001",
     project_name: "Financial Document Intelligence",
     title: "Implement PyMuPDF 10-K Table Extraction Parser",
-    description: "Extract multi-column tabular balance sheets and income statements into structured JSON chunks.",
+    description: "Extract multi-column tabular balance sheets and income statements into structured JSON chunks with bounding boxes.",
+    descriptive_paths: [
+      "rag-pipeline/extraction/pdf_tables.py",
+      "backend/app/api/parsers/sec_10k.py",
+      "docs/specs/10k_table_schema.json"
+    ],
     priority: "high",
     stage: "in_progress",
     assigned_to_id: "d-003",
@@ -165,6 +172,11 @@ export const DEFAULT_TASKS: Task[] = [
     project_name: "Financial Document Intelligence",
     title: "Review LangGraph Multi-Agent Cognitive Loop State",
     description: "Evaluate graph transition conditions and prevent recursive deadlocks in ratio calculation agent.",
+    descriptive_paths: [
+      "rag-pipeline/agents/financial_graph.py",
+      "backend/app/core/workflow_orchestrator.py",
+      "tests/agents/test_cycles.py"
+    ],
     priority: "urgent",
     stage: "review",
     assigned_to_id: "m-001",
@@ -179,6 +191,10 @@ export const DEFAULT_TASKS: Task[] = [
     project_name: "Financial Document Intelligence",
     title: "Unit Test Semantic Chunking Overlap Window",
     description: "Verify 15% sliding window overlap preserves context boundaries across SEC disclosures.",
+    descriptive_paths: [
+      "rag-pipeline/chunking/sliding_window.py",
+      "tests/unit/test_chunking.py"
+    ],
     priority: "medium",
     stage: "done",
     assigned_to_id: "d-001",
@@ -189,10 +205,53 @@ export const DEFAULT_TASKS: Task[] = [
   },
   {
     id: "task-004",
+    project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    project_name: "Financial Document Intelligence",
+    title: "Automate SEC Edgar RSS Feed Ingestion Webhook",
+    description: "Poll newly filed 10-K and 10-Q forms and queue them into Redis stream for asynchronous ingestion.",
+    descriptive_paths: [
+      "backend/app/services/sec_feed_listener.py",
+      "backend/app/workers/ingest_worker.py",
+      "config/sec_tickers.yaml"
+    ],
+    priority: "medium",
+    stage: "todo",
+    assigned_to_id: "d-003",
+    assigned_to_name: "David Kim",
+    assigned_to_role: "Document Ingestion Specialist",
+    due_date: "2026-10-24",
+    created_at: "2026-10-08T09:30:00Z"
+  },
+  {
+    id: "task-005",
+    project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    project_name: "Financial Document Intelligence",
+    title: "Benchmarking SEC Ratio Reasoning Accuracy vs SEC filings",
+    description: "Compare automated EBITDA & debt-to-equity ratio calculations against certified audited filings.",
+    descriptive_paths: [
+      "evals/benchmarks/ratio_accuracy_eval.py",
+      "evals/datasets/sp500_historical_2025.csv"
+    ],
+    priority: "high",
+    stage: "todo",
+    assigned_to_id: "m-002",
+    assigned_to_name: "Marcus Vance",
+    assigned_to_role: "Product & Delivery Lead",
+    due_date: "2026-10-29",
+    created_at: "2026-10-09T10:00:00Z"
+  },
+
+  // --- PROJECT 2: Biomedical Literature Search ---
+  {
+    id: "task-006",
     project_id: "d2a2b2c2-2222-4000-8000-000000000002",
     project_name: "Biomedical Literature Search",
     title: "Configure Supabase pgvector Indexing & HNSW Cosine Distance",
     description: "Set up m=16 ef_construction=64 on pubmed_abstracts embedding column for sub-50ms latency.",
+    descriptive_paths: [
+      "supabase/migrations/20261001_pgvector_hnsw.sql",
+      "backend/app/db/vector_client.py"
+    ],
     priority: "high",
     stage: "in_progress",
     assigned_to_id: "d-004",
@@ -202,11 +261,15 @@ export const DEFAULT_TASKS: Task[] = [
     created_at: "2026-10-07T10:15:00Z"
   },
   {
-    id: "task-005",
+    id: "task-007",
     project_id: "d2a2b2c2-2222-4000-8000-000000000002",
     project_name: "Biomedical Literature Search",
     title: "Sign-off on RAG Citation Graph Grounding Standards",
     description: "Approve accuracy metrics and threshold scores for citation claims in biomedical synthesis.",
+    descriptive_paths: [
+      "docs/architecture/biomedical_citations.md",
+      "rag-pipeline/grounding/verifier.py"
+    ],
     priority: "medium",
     stage: "todo",
     assigned_to_id: "m-002",
@@ -216,11 +279,35 @@ export const DEFAULT_TASKS: Task[] = [
     created_at: "2026-10-08T15:00:00Z"
   },
   {
-    id: "task-006",
+    id: "task-008",
+    project_id: "d2a2b2c2-2222-4000-8000-000000000002",
+    project_name: "Biomedical Literature Search",
+    title: "PubMed BioC API Batch Ingest Script",
+    description: "High-throughput asynchronous fetcher for PubMed XML papers using httpx and asyncio queues.",
+    descriptive_paths: [
+      "backend/app/ingestion/pubmed_bioc_crawler.py",
+      "backend/app/models/pubmed_entry.py"
+    ],
+    priority: "urgent",
+    stage: "review",
+    assigned_to_id: "d-002",
+    assigned_to_name: "Priya Sharma",
+    assigned_to_role: "Fullstack Engineer",
+    due_date: "2026-10-14",
+    created_at: "2026-10-06T14:00:00Z"
+  },
+
+  // --- PROJECT 3: Regulatory Web Scraper ---
+  {
+    id: "task-009",
     project_id: "d3a3b3c3-3333-4000-8000-000000000003",
     project_name: "Regulatory Web Scraper",
     title: "Develop Headless Chromium Playwright Session Handler",
     description: "Handle JS-rendered federal register portal without triggering automated bot challenges.",
+    descriptive_paths: [
+      "rag-pipeline/crawler/playwright_session.py",
+      "rag-pipeline/crawler/stealth_profile.json"
+    ],
     priority: "urgent",
     stage: "in_progress",
     assigned_to_id: "d-002",
@@ -230,11 +317,15 @@ export const DEFAULT_TASKS: Task[] = [
     created_at: "2026-10-07T16:30:00Z"
   },
   {
-    id: "task-007",
+    id: "task-010",
     project_id: "d3a3b3c3-3333-4000-8000-000000000003",
     project_name: "Regulatory Web Scraper",
     title: "Automated Amendment Diffing & Webhook Dispatcher",
     description: "Generate structured diff changelog whenever government notices update.",
+    descriptive_paths: [
+      "backend/app/services/diff_engine.py",
+      "backend/app/api/webhooks/alerts.py"
+    ],
     priority: "low",
     stage: "todo",
     assigned_to_id: "m-003",
@@ -242,6 +333,24 @@ export const DEFAULT_TASKS: Task[] = [
     assigned_to_role: "Engineering Manager",
     due_date: "2026-10-28",
     created_at: "2026-10-09T08:00:00Z"
+  },
+  {
+    id: "task-011",
+    project_id: "d3a3b3c3-3333-4000-8000-000000000003",
+    project_name: "Regulatory Web Scraper",
+    title: "HTML DOM Content Sanitizer via BeautifulSoup4",
+    description: "Strip header, footer, scripts, ads and extract pure regulatory article bodies.",
+    descriptive_paths: [
+      "rag-pipeline/extraction/soup_sanitizer.py",
+      "tests/fixtures/sample_regulations_dom.html"
+    ],
+    priority: "high",
+    stage: "done",
+    assigned_to_id: "d-001",
+    assigned_to_name: "Alex Rivera",
+    assigned_to_role: "Senior LangGraph Engineer",
+    due_date: "2026-10-06",
+    created_at: "2026-10-01T12:00:00Z"
   }
 ];
 
@@ -323,7 +432,6 @@ export const PRIORITY_CONFIG: Record<
 export async function fetchWorkspaceMembers(
   supabase?: SupabaseClient
 ): Promise<Member[]> {
-  // 1. Try Supabase
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -335,11 +443,10 @@ export async function fetchWorkspaceMembers(
         return data;
       }
     } catch {
-      // Supabase table does not exist yet or connection error
+      // Table absent
     }
   }
 
-  // 2. Try Backend API
   try {
     const res = await fetch(`${API_URL}/api/v1/members`);
     if (res.ok) {
@@ -350,10 +457,9 @@ export async function fetchWorkspaceMembers(
       }
     }
   } catch {
-    // Backend offline
+    // Offline
   }
 
-  // 3. Try LocalStorage
   if (typeof window !== "undefined") {
     const local = localStorage.getItem(LS_MEMBERS_KEY);
     if (local) {
@@ -366,7 +472,6 @@ export async function fetchWorkspaceMembers(
     }
   }
 
-  // 4. Default seed
   saveMembersLocal(DEFAULT_MEMBERS);
   return DEFAULT_MEMBERS;
 }
@@ -376,7 +481,7 @@ export function saveMembersLocal(members: Member[]) {
     try {
       localStorage.setItem(LS_MEMBERS_KEY, JSON.stringify(members));
     } catch {
-      // LocalStorage error
+      // Storage error
     }
   }
 }
@@ -395,7 +500,7 @@ export async function addWorkspaceMember(
     try {
       await supabase.from("members").insert([memberWithId]);
     } catch {
-      // Ignored if table absent
+      // Ignored
     }
   }
 
@@ -408,7 +513,6 @@ export async function addWorkspaceMember(
 export async function fetchWorkspaceTasks(
   supabase?: SupabaseClient
 ): Promise<Task[]> {
-  // 1. Try Supabase
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -420,11 +524,10 @@ export async function fetchWorkspaceTasks(
         return data;
       }
     } catch {
-      // Supabase table absent
+      // Ignored
     }
   }
 
-  // 2. Try Backend API
   try {
     const res = await fetch(`${API_URL}/api/v1/tasks`);
     if (res.ok) {
@@ -435,10 +538,9 @@ export async function fetchWorkspaceTasks(
       }
     }
   } catch {
-    // Backend offline
+    // Offline
   }
 
-  // 3. Try LocalStorage
   if (typeof window !== "undefined") {
     const local = localStorage.getItem(LS_TASKS_KEY);
     if (local) {
@@ -451,7 +553,6 @@ export async function fetchWorkspaceTasks(
     }
   }
 
-  // 4. Fallback defaults
   saveTasksLocal(DEFAULT_TASKS);
   return DEFAULT_TASKS;
 }
@@ -480,11 +581,10 @@ export async function createWorkspaceTask(
     try {
       await supabase.from("tasks").insert([newTask]);
     } catch {
-      // Supabase table missing
+      // Ignored
     }
   }
 
-  // Save to LocalStorage
   if (typeof window !== "undefined") {
     const existing = await fetchWorkspaceTasks();
     const updated = [newTask, ...existing];
@@ -515,7 +615,7 @@ export async function updateWorkspaceTask(
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", taskId);
     } catch {
-      // Table missing
+      // Ignored
     }
   }
 
@@ -534,7 +634,7 @@ export async function deleteWorkspaceTask(
     try {
       await supabase.from("tasks").delete().eq("id", taskId);
     } catch {
-      // Ignore
+      // Ignored
     }
   }
 

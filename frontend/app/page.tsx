@@ -64,13 +64,7 @@ export default function Home() {
             href="/projects"
             className="flex h-11 items-center justify-center rounded-xl bg-indigo-600 px-6 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:bg-indigo-500 active:scale-95"
           >
-            Manage Projects &rarr;
-          </Link>
-          <Link
-            href="/tasks"
-            className="flex h-11 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/90 px-6 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-800 hover:text-white"
-          >
-            Task Board
+            Manage Projects & Tasks &rarr;
           </Link>
           <Link
             href="/members"
