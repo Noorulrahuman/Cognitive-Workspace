@@ -70,6 +70,15 @@ function LoginContent() {
     }
   }, [user, router]);
 
+    // FIX: keep the visible tab in sync with the URL.q
+  // Problem before: clicking "Register" in the navbar while already on /login
+  // changed the URL to /login?tab=register, but the page was not re-created,
+  // and useState only reads the URL once, so the Sign In form stayed on screen.
+  // Now, whenever the URL's ?tab= value changes, we switch the tab to match.
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
   const passwordStrength = calculatePasswordStrength(registerPassword);
   const passwordsMatch =
     registerPassword.length > 0 &&
@@ -119,8 +128,9 @@ function LoginContent() {
       setErrorMessage("Passwords do not match. Please verify.");
       return;
     }
-
-    if (passwordStrength.score < 2) {
+    // FIX: the message says "at least 8 characters", so also require the length check.
+    // Before, a short password like "ab1!" could pass because only the score was checked.
+    if (!passwordStrength.hasLength || passwordStrength.score < 2) {
       setErrorMessage("Please choose a stronger password with at least 8 characters.");
       return;
     }
@@ -200,8 +210,10 @@ function LoginContent() {
         {/* Brand Header */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-3 group">
-            <div className="h-3.5 w-3.5 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
-            <span className="font-mono text-sm font-bold tracking-wider uppercase text-white">
+                        {/* Gold dot, same style as the navbar (was green) */}
+            <div className="h-3.5 w-3.5 rounded-full bg-amber-400 group-hover:scale-125 transition-transform shadow-[0_0_10px_rgba(251,191,36,0.7)]" />
+            {/* Gold gradient text with a slow shine (animation is defined in globals.css) */}
+            <span className="font-mono text-sm font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)]">
               Cognitive Workspace
             </span>
           </Link>

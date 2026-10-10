@@ -1,9 +1,64 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import {
+  Task,
+  TaskStage,
+  TaskPriority,
+  Member,
+  STAGE_CONFIG,
+  PRIORITY_CONFIG,
+  fetchWorkspaceTasks,
+  fetchWorkspaceMembers,
+  createWorkspaceTask,
+  updateWorkspaceTask,
+} from "@/utils/workspaceData";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+
+const PROJECT_COLORS = [
+  "from-indigo-500 to-violet-500",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-500",
+  "from-sky-500 to-cyan-500",
+  "from-rose-500 to-pink-500",
+  "from-fuchsia-500 to-purple-500",
+];
+
+function getProjectColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) % 1000003;
+  }
+  return PROJECT_COLORS[hash % PROJECT_COLORS.length];
+}
+
+function getProjectInitial(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || "P";
+}
+
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function formatDate(iso: string): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 interface Project {
   id: string;
@@ -69,18 +124,62 @@ CREATE TABLE IF NOT EXISTS public.projects (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS public.members (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role_type TEXT NOT NULL CHECK (role_type IN ('manager', 'developer')),
+    role_title TEXT NOT NULL,
+    department TEXT DEFAULT 'Engineering',
+    avatar_color TEXT DEFAULT 'from-blue-600 to-cyan-500',
+    status TEXT DEFAULT 'online',
+    skills TEXT[] DEFAULT ARRAY[]::TEXT[],
+    assigned_projects TEXT[] DEFAULT ARRAY[]::TEXT[],
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.tasks (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    project_name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
+    priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+    stage TEXT NOT NULL DEFAULT 'todo' CHECK (stage IN ('todo', 'in_progress', 'review', 'done')),
+    assigned_to_id TEXT,
+    assigned_to_name TEXT,
+    assigned_to_role TEXT,
+    due_date DATE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
 CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);`;
+CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
+
+CREATE POLICY "Allow read members" ON public.members FOR SELECT USING (true);
+CREATE POLICY "Allow insert members" ON public.members FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
+CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);`;
 
 export default function ProjectsPage() {
   const supabase = createClient();
   const { user } = useAuth();
+  const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -94,9 +193,21 @@ export default function ProjectsPage() {
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [projectDetail, setProjectDetail] = useState<Project | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Form states
+  // Inline Add Task state inside project detail
+  const [isInlineAddTaskOpen, setIsInlineAddTaskOpen] = useState<boolean>(false);
+  const [inlineTaskForm, setInlineTaskForm] = useState({
+    title: "",
+    description: "",
+    assigned_to_id: "",
+    due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+    priority: "medium" as TaskPriority,
+    stage: "todo" as TaskStage,
+  });
+
+  // Project form states
   const [formData, setFormData] = useState({
     name: "",
     category: "Agentic Workflow",
@@ -118,11 +229,19 @@ export default function ProjectsPage() {
     }
   };
 
-  // Load projects from Supabase with fallback
-  const loadProjects = useCallback(async () => {
+  // Load projects, tasks, and members
+  const loadWorkspaceData = useCallback(async () => {
     setLoading(true);
 
-    // 1. Attempt Supabase direct query
+    // Load tasks & members in parallel
+    const [tasksData, membersData] = await Promise.all([
+      fetchWorkspaceTasks(supabase),
+      fetchWorkspaceMembers(supabase),
+    ]);
+    setTasks(tasksData);
+    setMembers(membersData);
+
+    // 1. Attempt Supabase direct query for projects
     try {
       const { data, error } = await supabase
         .from("projects")
@@ -134,7 +253,6 @@ export default function ProjectsPage() {
         setSupabaseNotice(null);
 
         if (data.length > 0) {
-          // Normalize tags in case postgres returned string
           const formatted = data.map((item) => ({
             ...item,
             tags: Array.isArray(item.tags)
@@ -148,13 +266,11 @@ export default function ProjectsPage() {
           setLoading(false);
           return;
         } else {
-          // Supabase table exists but is empty; show default sample templates
           setProjects(DEFAULT_PROJECTS);
           setLoading(false);
           return;
         }
       } else if (error) {
-        console.warn("Supabase projects table query notice:", error.message);
         setSupabaseConnected(false);
         if (error.code === "PGRST205" || error.message.includes("Could not find the table")) {
           setSupabaseNotice("Table 'projects' does not exist in Supabase yet. Run the SQL schema to enable live cloud persistence.");
@@ -162,14 +278,13 @@ export default function ProjectsPage() {
           setSupabaseNotice(error.message);
         }
       }
-    } catch (err: unknown) {
-      console.warn("Supabase fetch exception:", err);
+    } catch {
       setSupabaseConnected(false);
     }
 
     // 2. Fallback: Query backend API
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/projects");
+      const res = await fetch(`${API_URL}/api/v1/projects`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -182,7 +297,7 @@ export default function ProjectsPage() {
       // Backend offline
     }
 
-    // 3. Fallback: LocalStorage or Defaults
+    // 3. Fallback: LocalStorage
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("cognitive_projects");
       if (saved) {
@@ -204,8 +319,34 @@ export default function ProjectsPage() {
   }, [supabase]);
 
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    loadWorkspaceData();
+  }, [loadWorkspaceData]);
+
+  // Map tasks by project
+  const projectTasksMap = useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    for (const t of tasks) {
+      const key = t.project_name || t.project_id;
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
+    }
+    return map;
+  }, [tasks]);
+
+  // Esc key closes modals
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsAddModalOpen(false);
+        setIsSqlModalOpen(false);
+        setProjectToDelete(null);
+        setProjectDetail(null);
+        setIsInlineAddTaskOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Handle Add Project Submit
   const handleAddProject = async (e: React.FormEvent) => {
@@ -232,7 +373,6 @@ export default function ProjectsPage() {
     let createdProject: Project | null = null;
     let savedToSupabase = false;
 
-    // 1. Insert directly into Supabase database
     try {
       const { data, error } = await supabase
         .from("projects")
@@ -248,31 +388,24 @@ export default function ProjectsPage() {
         savedToSupabase = true;
         setSupabaseConnected(true);
         setSupabaseNotice(null);
-      } else if (error) {
-        console.warn("Supabase insert error:", error);
-        if (error.code === "PGRST205" || error.message.includes("Could not find the table")) {
-          setSupabaseNotice("Table 'projects' does not exist in Supabase yet. Run the SQL schema to enable live cloud persistence.");
-        }
-      }
-    } catch (err: unknown) {
-      console.warn("Supabase insert exception:", err);
-    }
-
-    // 2. Also notify backend API if available
-    try {
-      const res = await fetch("http://127.0.0.1:8000/api/v1/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(projectPayload)
-      });
-      if (res.ok && !createdProject) {
-        createdProject = await res.json();
       }
     } catch {
-      // offline backend
+      // Ignored
     }
 
-    // 3. Fallback object if offline
+    if (!createdProject) {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/projects`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(projectPayload)
+        });
+        if (res.ok) createdProject = await res.json();
+      } catch {
+        // offline
+      }
+    }
+
     if (!createdProject) {
       createdProject = {
         id: `proj-${Date.now()}`,
@@ -302,9 +435,9 @@ export default function ProjectsPage() {
     setIsAddModalOpen(false);
 
     if (savedToSupabase) {
-      showToast(`Project "${createdProject.name}" successfully saved to Supabase! ✨`);
+      showToast(`Project "${createdProject.name}" created and synced to Supabase.`);
     } else {
-      showToast(`Project "${createdProject.name}" saved locally. (Supabase table setup needed)`);
+      showToast(`Project "${createdProject.name}" created locally.`);
     }
   };
 
@@ -314,26 +447,68 @@ export default function ProjectsPage() {
     const targetId = projectToDelete.id;
     const targetName = projectToDelete.name;
 
-    // Delete from Supabase
     try {
       await supabase.from("projects").delete().eq("id", targetId);
-    } catch (err) {
-      console.warn("Supabase delete failed:", err);
+    } catch {
+      // Ignore
     }
 
-    // Delete from backend API
     try {
-      await fetch(`http://127.0.0.1:8000/api/v1/projects/${targetId}`, {
-        method: "DELETE"
-      });
+      await fetch(`${API_URL}/api/v1/projects/${targetId}`, { method: "DELETE" });
     } catch {
-      // offline backend
+      // Ignore
     }
 
     const updated = projects.filter((p) => p.id !== targetId);
     saveLocalProjects(updated);
     setProjectToDelete(null);
     showToast(`Project "${targetName}" removed.`);
+  };
+
+  // Add Task directly inside project detail
+  const handleInlineAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!projectDetail || !inlineTaskForm.title.trim()) return;
+
+    const assignedMember = members.find((m) => m.id === inlineTaskForm.assigned_to_id);
+
+    const newTask = await createWorkspaceTask(
+      {
+        project_id: projectDetail.id,
+        project_name: projectDetail.name,
+        title: inlineTaskForm.title.trim(),
+        description: inlineTaskForm.description.trim() || "Created from project details modal.",
+        priority: inlineTaskForm.priority,
+        stage: inlineTaskForm.stage,
+        assigned_to_id: assignedMember ? assignedMember.id : null,
+        assigned_to_name: assignedMember ? assignedMember.name : "Unassigned",
+        assigned_to_role: assignedMember ? assignedMember.role_title : null,
+        due_date: inlineTaskForm.due_date,
+      },
+      supabase
+    );
+
+    setTasks((prev) => [newTask, ...prev]);
+    setIsInlineAddTaskOpen(false);
+    setInlineTaskForm({
+      title: "",
+      description: "",
+      assigned_to_id: "",
+      due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+      priority: "medium",
+      stage: "todo",
+    });
+    showToast(`Task "${newTask.title}" added to ${projectDetail.name}.`);
+  };
+
+  // Quick Advance Task Stage inside project detail
+  const handleAdvanceTaskStage = async (task: Task) => {
+    const order: TaskStage[] = ["todo", "in_progress", "review", "done"];
+    const idx = order.indexOf(task.stage);
+    const nextStage = order[(idx + 1) % order.length];
+    const updated = await updateWorkspaceTask(task.id, { stage: nextStage }, supabase);
+    setTasks(updated);
+    showToast(`Task moved to ${STAGE_CONFIG[nextStage].label}.`);
   };
 
   const handleCopySql = () => {
@@ -355,6 +530,13 @@ export default function ProjectsPage() {
     return matchesCategory && matchesSearch;
   });
 
+  const detailProjectTasks = useMemo(() => {
+    if (!projectDetail) return [];
+    return tasks.filter(
+      (t) => t.project_name === projectDetail.name || t.project_id === projectDetail.id
+    );
+  }, [projectDetail, tasks]);
+
   return (
     <div className="min-h-full py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
       {/* Toast Notification */}
@@ -365,7 +547,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Supabase Notice Banner if table needs migration */}
+      {/* Supabase Notice Banner */}
       {supabaseNotice && (
         <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200">
           <div className="flex items-center gap-2.5">
@@ -373,96 +555,71 @@ export default function ProjectsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div className="text-xs">
-              <span className="font-semibold text-amber-100">Supabase Table Setup: </span>
+              <span className="font-semibold text-amber-100">Database Schema: </span>
               {supabaseNotice}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setIsSqlModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-black text-xs font-semibold cursor-pointer transition-colors shadow-sm"
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer transition shadow-xs"
             >
               View SQL Schema
             </button>
             <button
-              onClick={() => loadProjects()}
-              className="px-3 py-1.5 rounded-lg border border-amber-500/40 hover:bg-amber-500/20 text-amber-200 text-xs font-medium cursor-pointer transition-colors"
+              onClick={loadWorkspaceData}
+              className="px-3 py-1.5 rounded-lg border border-amber-500/30 text-amber-200 hover:bg-amber-500/20 text-xs font-semibold cursor-pointer transition"
             >
-              Retry Check
+              Retry
             </button>
           </div>
         </div>
       )}
 
-      {/* Header section */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-8 border-b border-zinc-800">
+      {/* Main Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
         <div>
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium">
-              <span>Workspace Management</span>
-            </div>
-
-            {/* Supabase live badge */}
-            {supabaseConnected === true ? (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-medium">
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Workspace Projects
+            </h1>
+            {supabaseConnected === true && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Supabase Live DB</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsSqlModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border border-zinc-700 bg-zinc-800/80 text-zinc-300 hover:text-white text-xs font-medium cursor-pointer transition-colors"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                <span>Supabase Schema Ready</span>
-              </button>
+                Supabase Live
+              </span>
             )}
           </div>
-
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            Projects & Pipelines
-          </h1>
-          <p className="mt-1 text-sm text-zinc-400 max-w-xl">
-            Create, configure, and manage projects stored directly in your Supabase database with pgvector, document indices, and autonomous agent loops.
+          <p className="text-xs sm:text-sm text-zinc-400">
+            Cognitive document repositories, task workflows, and Gemini multi-agent knowledge graphs.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsSqlModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 px-3 py-2 text-xs font-semibold text-zinc-300 hover:text-white transition-all cursor-pointer"
-            title="View Supabase SQL Table Schema"
-          >
-            <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-16 5h16" />
-            </svg>
-            SQL Schema
-          </button>
-
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() => setIsAddModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Add New Project
+            <span>New Project</span>
           </button>
         </div>
       </div>
 
-      {/* Filters and Search Bar */}
-      <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-        {/* Category Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-2 sm:pb-0">
+      {/* Filter and Search Bar */}
+      <div className="mt-6 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        {/* Category Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                 selectedCategory === cat
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700"
+                  ? "bg-zinc-800 text-white shadow-xs font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
               }`}
             >
               {cat}
@@ -470,150 +627,440 @@ export default function ProjectsPage() {
           ))}
         </div>
 
-        {/* Search input */}
-        <div className="relative w-full sm:w-72">
+        {/* Search */}
+        <div className="relative w-full md:w-64">
           <input
             type="text"
-            placeholder="Search projects or tags..."
+            placeholder="Search projects & tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-lg border border-zinc-800 bg-zinc-900/90 px-3.5 py-1.5 pl-9 text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-1.5 pl-9 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
           />
-          <svg
-            className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
       </div>
 
-      {/* Projects Grid */}
-      <div className="mt-8">
+      {/* Project Cards Grid */}
+      <div className="mt-6">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-56 rounded-xl border border-zinc-800/60 bg-zinc-900/30 animate-pulse p-6" />
-            ))}
+          <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+            <div className="h-8 w-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+            <p className="mt-3 text-xs font-mono">Synchronizing workspace projects...</p>
           </div>
         ) : filteredProjects.length === 0 ? (
-          <div className="text-center py-16 border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20">
-            <div className="mx-auto h-12 w-12 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 mb-3">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-            </div>
-            <h3 className="text-sm font-semibold text-zinc-300">No projects found</h3>
+          <div className="rounded-2xl border border-dashed border-zinc-800 p-12 text-center">
+            <p className="text-sm font-semibold text-zinc-300">No projects found</p>
             <p className="mt-1 text-xs text-zinc-500">
-              {searchQuery ? "Try refining your search query or filter." : "Get started by adding your first project to Supabase."}
+              Try adjusting your filter or search query.
             </p>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="mt-4 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white cursor-pointer"
-            >
-              + Create Project
-            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <div
-                key={project.id}
-                className="group relative flex flex-col justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-6 backdrop-blur-sm transition-all hover:border-zinc-700 hover:bg-zinc-900/90 shadow-sm"
-              >
-                <div>
-                  {/* Card Header */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
-                      {project.category}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      <span className="text-[11px] font-mono text-zinc-400">{project.status}</span>
-                    </div>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredProjects.map((project) => {
+              const projectTasks = projectTasksMap[project.name] || projectTasksMap[project.id] || [];
+              const inProgressCount = projectTasks.filter((t) => t.stage === "in_progress").length;
 
-                  {/* Title & Description */}
-                  <h3 className="text-lg font-bold text-zinc-100 group-hover:text-indigo-400 transition-colors">
-                    {project.name}
-                  </h3>
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-400 line-clamp-3">
-                    {project.description}
-                  </p>
-
-                  {/* Source URL if present */}
-                  {project.source_url && (
-                    <div className="mt-3 flex items-center gap-1.5 text-[11px] text-zinc-500 truncate font-mono">
-                      <svg className="w-3.5 h-3.5 shrink-0 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                      <span className="truncate">{project.source_url}</span>
-                    </div>
-                  )}
-
-                  {/* Tags */}
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    {Array.isArray(project.tags) &&
-                      project.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded border border-zinc-800 bg-zinc-950/60 px-2 py-0.5 text-[10px] font-mono text-zinc-400"
-                        >
-                          {tag}
+              return (
+                <div
+                  key={project.id}
+                  onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}/tasks`)}
+                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-5 hover:border-indigo-500/50 hover:bg-zinc-900/80 transition-all shadow-md cursor-pointer"
+                  title="Click to open project tasks workspace"
+                >
+                  <div>
+                    {/* Top row: Icon + Category + Info button */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div
+                        className={`h-10 w-10 rounded-xl bg-linear-to-br ${getProjectColor(
+                          project.name
+                        )} flex items-center justify-center text-sm font-bold text-white shadow-md`}
+                      >
+                        {getProjectInitial(project.name)}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+                          {project.category}
                         </span>
-                      ))}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProjectDetail(project);
+                          }}
+                          className="p-1 rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition"
+                          title="View project metadata"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Title & Description */}
+                    <h2 className="mt-4 text-base font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1">
+                      {project.name}
+                    </h2>
+                    <p className="mt-1.5 text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+                      {project.description}
+                    </p>
+
+                    {/* Source URL if present */}
+                    {project.source_url && (
+                      <div className="mt-3 flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 truncate">
+                        <svg className="w-3.5 h-3.5 text-zinc-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        <span className="truncate">{getDomain(project.source_url)}</span>
+                      </div>
+                    )}
+
+                    {/* Tasks pill on Card */}
+                    <div className="mt-3.5 flex items-center gap-2">
+                      <Link
+                        href={`/projects/${encodeURIComponent(project.id)}/tasks`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/25 text-[11px] font-mono text-sky-300 transition"
+                      >
+                        <span>📋 {projectTasks.length} {projectTasks.length === 1 ? "task" : "tasks"}</span>
+                        {inProgressCount > 0 && (
+                          <span className="text-[10px] text-amber-300">({inProgressCount} active)</span>
+                        )}
+                        <span>&rarr;</span>
+                      </Link>
+                    </div>
+
+                    {/* Tags */}
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {Array.isArray(project.tags) &&
+                        project.tags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded border border-zinc-800 bg-zinc-950/60 px-2 py-0.5 text-[10px] font-mono text-zinc-400"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      {Array.isArray(project.tags) && project.tags.length > 3 && (
+                        <span className="rounded border border-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-500">
+                          +{project.tags.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer details & Actions */}
+                  <div className="mt-6 pt-4 border-t border-zinc-800/60 flex items-center justify-between">
+                    <div className="flex flex-col gap-0.5 text-[11px] text-zinc-500 font-mono">
+                      <span>{project.documents_count} {project.documents_count === 1 ? "doc" : "docs"} indexed</span>
+                      <span className="text-[9px] text-zinc-600">
+                        {formatDate(project.created_at)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Renamed Copilot to Gemini */}
+                      <Link
+                        href={`/chat?project=${encodeURIComponent(project.name)}`}
+                        className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-800 hover:bg-indigo-600 text-zinc-300 hover:text-white transition-colors"
+                        title="Open in AI Gemini"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Gemini &rarr;
+                      </Link>
+
+                      {/* Remove Project Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setProjectToDelete(project);
+                        }}
+                        className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                        title="Remove Project"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                {/* Footer details & Actions */}
-                <div className="mt-6 pt-4 border-t border-zinc-800/60 flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5 text-[11px] text-zinc-500 font-mono">
-                    <span>{project.documents_count} docs indexed</span>
-                    <span className="text-[9px] text-zinc-600">
-                      {project.created_at ? new Date(project.created_at).toLocaleDateString() : ""}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/chat?project=${encodeURIComponent(project.name)}`}
-                      className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-800 hover:bg-indigo-600 text-zinc-300 hover:text-white transition-colors"
-                      title="Open in AI Copilot"
-                    >
-                      Copilot &rarr;
-                    </Link>
-
-                    {/* Remove Project Button */}
-                    <button
-                      onClick={() => setProjectToDelete(project)}
-                      className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
-                      title="Remove Project"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
+      {/* ============================================================ */}
+      {/* PROJECT DETAILS & TASKS MODAL */}
+      {/* ============================================================ */}
+      {projectDetail && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4"
+          onClick={() => setProjectDetail(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${projectDetail.name} details`}
+            className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top row */}
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-zinc-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+                  {projectDetail.category}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  {projectDetail.status}
+                </span>
+              </div>
+              <button
+                onClick={() => setProjectDetail(null)}
+                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                aria-label="Close details"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Project Name + Description */}
+            <h2 className="mt-4 text-xl font-bold text-white">{projectDetail.name}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap">
+              {projectDetail.description || "No description added for this project."}
+            </p>
+
+            {/* Facts: Documents count & Created */}
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Documents indexed</p>
+                <p className="mt-1 text-lg font-semibold text-white">{projectDetail.documents_count}</p>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-3">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Created Date</p>
+                <p className="mt-1 text-lg font-semibold text-white">
+                  {formatDate(projectDetail.created_at) || "-"}
+                </p>
+              </div>
+            </div>
+
+            {/* ============================================================ */}
+            {/* TASKS SECTION FOR THIS PROJECT */}
+            {/* ============================================================ */}
+            <div className="mt-6 pt-5 border-t border-zinc-800">
+              <div className="flex items-center justify-between pb-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Project Tasks ({detailProjectTasks.length})
+                  </h3>
+                  <span className="text-[10px] font-mono text-zinc-500">Milestones & Stages</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsInlineAddTaskOpen(!isInlineAddTaskOpen)}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                  >
+                    {isInlineAddTaskOpen ? "Close Form" : "+ Add Task"}
+                  </button>
+                  <Link
+                    href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
+                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
+                  >
+                    Open Project Tasks &rarr;
+                  </Link>
+                </div>
+              </div>
+
+              {/* Inline Add Task Form */}
+              {isInlineAddTaskOpen && (
+                <form
+                  onSubmit={handleInlineAddTask}
+                  className="mb-4 p-4 rounded-xl border border-indigo-500/30 bg-zinc-950/80 space-y-3 animate-scale-up"
+                >
+                  <p className="text-xs font-bold text-indigo-300">
+                    Add New Task to {projectDetail.name}
+                  </p>
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Task Title (e.g. Ingest 10-K tables via PyMuPDF)..."
+                      value={inlineTaskForm.title}
+                      onChange={(e) => setInlineTaskForm({ ...inlineTaskForm, title: e.target.value })}
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Assignee */}
+                    <div>
+                      <select
+                        value={inlineTaskForm.assigned_to_id}
+                        onChange={(e) =>
+                          setInlineTaskForm({ ...inlineTaskForm, assigned_to_id: e.target.value })
+                        }
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                      >
+                        <option value="">Unassigned</option>
+                        <optgroup label="👑 Managers">
+                          {members
+                            .filter((m) => m.role_type === "manager")
+                            .map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} (Manager)
+                              </option>
+                            ))}
+                        </optgroup>
+                        <optgroup label="⚡ Developers">
+                          {members
+                            .filter((m) => m.role_type === "developer")
+                            .map((m) => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} (Developer)
+                              </option>
+                            ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* Priority */}
+                    <div>
+                      <select
+                        value={inlineTaskForm.priority}
+                        onChange={(e) =>
+                          setInlineTaskForm({
+                            ...inlineTaskForm,
+                            priority: e.target.value as TaskPriority,
+                          })
+                        }
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                      >
+                        <option value="low">Low Priority</option>
+                        <option value="medium">Medium Priority</option>
+                        <option value="high">High Priority</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+
+                    {/* Due Date */}
+                    <div>
+                      <input
+                        type="date"
+                        required
+                        value={inlineTaskForm.due_date}
+                        onChange={(e) =>
+                          setInlineTaskForm({ ...inlineTaskForm, due_date: e.target.value })
+                        }
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setIsInlineAddTaskOpen(false)}
+                      className="px-3 py-1 rounded-md text-xs text-zinc-400 hover:text-white"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-3 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs"
+                    >
+                      Save Task
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Tasks List */}
+              {detailProjectTasks.length === 0 ? (
+                <div className="p-4 rounded-xl border border-dashed border-zinc-800 text-center text-xs text-zinc-500">
+                  No tasks created for this project yet. Click &ldquo;+ Add Task&rdquo; to assign one.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {detailProjectTasks.map((task) => {
+                    const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+                    const stageConf = STAGE_CONFIG[task.stage];
+
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-center justify-between gap-3 p-3 rounded-xl border border-zinc-800/80 bg-zinc-950/70 hover:border-zinc-700 transition"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded border px-1.5 py-0.2 text-[9px] font-mono ${priorityConf.badge}`}>
+                              {priorityConf.label}
+                            </span>
+                            <span className="text-xs font-semibold text-white truncate">
+                              {task.title}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-3 text-[10px] font-mono text-zinc-400">
+                            <span>Assignee: <strong className="text-zinc-200">{task.assigned_to_name || "Unassigned"}</strong></span>
+                            <span>Due: <strong className="text-zinc-200">{formatDate(task.due_date)}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Stage Badge & Advance */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => handleAdvanceTaskStage(task)}
+                            title="Click to advance stage"
+                            className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono font-medium transition cursor-pointer hover:scale-105 ${stageConf.badge}`}
+                          >
+                            {stageConf.label} &rarr;
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-zinc-800">
+              <button
+                onClick={() => setProjectDetail(null)}
+                className="px-4 py-2 rounded-lg border border-zinc-700 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+              >
+                Close
+              </button>
+              <Link
+                href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
+                className="px-4 py-2 rounded-lg border border-sky-500/40 bg-sky-950/30 text-xs font-semibold text-sky-200 hover:bg-sky-900/50 hover:text-white transition"
+              >
+                Project Tasks &rarr;
+              </Link>
+              <Link
+                href={`/chat?project=${encodeURIComponent(projectDetail.name)}`}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md transition"
+              >
+                Open in Gemini &rarr;
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
       {/* ADD PROJECT MODAL */}
+      {/* ============================================================ */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-scale-up">
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-white">Create New Project</h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Supabase DB
-                </span>
-              </div>
+              <h2 className="text-lg font-bold text-white">Create New Project</h2>
               <button
                 onClick={() => setIsAddModalOpen(false)}
                 className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
@@ -635,7 +1082,7 @@ export default function ProjectsPage() {
                   placeholder="e.g. Legal Compliance Analyzer"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
 
@@ -646,7 +1093,7 @@ export default function ProjectsPage() {
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
                 >
                   <option value="Agentic Workflow">Agentic Workflow (LangGraph)</option>
                   <option value="Semantic Search">Semantic Search (pgvector & Supabase)</option>
@@ -670,11 +1117,11 @@ export default function ProjectsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Source Ingestion URL or Seed Path (Optional)
+                  Source Ingestion URL (Optional)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. https://example.com/reports or s3://bucket/docs"
+                  placeholder="e.g. https://example.com/reports"
                   value={formData.source_url}
                   onChange={(e) => setFormData({ ...formData, source_url: e.target.value })}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
@@ -710,10 +1157,10 @@ export default function ProjectsPage() {
                   {submitting ? (
                     <>
                       <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      <span>Saving to Supabase...</span>
+                      <span>Saving...</span>
                     </>
                   ) : (
-                    <span>Create & Store Project</span>
+                    <span>Create Project</span>
                   )}
                 </button>
               </div>
@@ -722,7 +1169,9 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* ============================================================ */}
       {/* SQL SCHEMA MODAL */}
+      {/* ============================================================ */}
       {isSqlModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
           <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl animate-scale-up">
@@ -750,7 +1199,7 @@ export default function ProjectsPage() {
 
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono text-zinc-400">schema.sql (Table: public.projects)</span>
+                <span className="text-xs font-mono text-zinc-400">schema.sql (Projects, Members, Tasks)</span>
                 <button
                   onClick={handleCopySql}
                   className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
@@ -776,13 +1225,6 @@ export default function ProjectsPage() {
               <div className="relative rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-emerald-400/90 overflow-x-auto max-h-72 select-all">
                 <pre>{SQL_SCHEMA_TEXT}</pre>
               </div>
-
-              <div className="mt-4 p-3 rounded-lg border border-zinc-800 bg-zinc-950/60 text-xs text-zinc-400 space-y-1">
-                <p className="font-semibold text-zinc-300">How to apply:</p>
-                <p>1. Open your <a href="https://supabase.com/dashboard/project/nhcwsslenciehwsbcswg/sql" target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">Supabase SQL Editor</a>.</p>
-                <p>2. Paste the SQL script above and click <span className="text-emerald-400 font-semibold">Run</span>.</p>
-                <p>3. Return here and click &ldquo;Retry Check&rdquo; or refresh the page.</p>
-              </div>
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
@@ -797,7 +1239,9 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {/* ============================================================ */}
       {/* DELETE CONFIRMATION MODAL */}
+      {/* ============================================================ */}
       {projectToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
           <div className="w-full max-w-md rounded-2xl border border-rose-900/50 bg-zinc-900 p-6 shadow-2xl">
@@ -809,7 +1253,7 @@ export default function ProjectsPage() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Remove Project</h3>
-                <p className="text-xs text-zinc-400">This action will delete it from Supabase.</p>
+                <p className="text-xs text-zinc-400">This action cannot be undone.</p>
               </div>
             </div>
 
