@@ -60,6 +60,19 @@ function formatDate(iso: string): string {
   });
 }
 
+// NEW: finds the people working on a project.
+// A member counts as part of the team when the project is in their
+// "assigned_projects" list, OR when at least one task of the project is assigned to them.
+function getProjectTeam(project: Project, members: Member[], projectTasks: Task[]): Member[] {
+  return members.filter(
+    (m) =>
+      m.assigned_projects?.includes(project.name) ||
+      projectTasks.some((t) => t.assigned_to_id === m.id)
+  );
+}
+
+
+
 interface Project {
   id: string;
   name: string;
@@ -183,7 +196,24 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  // NEW: grid view (3 cards per row) or list view (1 card per row)
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  // NEW: how the project cards are ordered
+  const [sortBy, setSortBy] = useState<string>("newest");
+  // NEW: apply the default view and order chosen in Account Settings
+  useEffect(() => {
+    try {
+      const savedView = localStorage.getItem("cognitive_pref_view");
+      if (savedView === "grid" || savedView === "list") setViewMode(savedView);
 
+      const savedSort = localStorage.getItem("cognitive_pref_sort");
+      if (savedSort && ["newest", "oldest", "name", "docs"].includes(savedSort)) {
+        setSortBy(savedSort);
+      }
+    } catch {
+      // Ignored: the normal defaults are used
+    }
+  }, []);
   // Supabase live status
   const [supabaseConnected, setSupabaseConnected] = useState<boolean | null>(null);
   const [supabaseNotice, setSupabaseNotice] = useState<string | null>(null);
@@ -195,6 +225,16 @@ export default function ProjectsPage() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [projectDetail, setProjectDetail] = useState<Project | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+    // NEW: the project being edited (null = edit popup closed)
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
+  const [editForm, setEditForm] = useState({
+    category: "Agentic Workflow",
+    tags: "",
+    source_url: "",
+    description: ""
+  });
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
   // Inline Add Task state inside project detail
   const [isInlineAddTaskOpen, setIsInlineAddTaskOpen] = useState<boolean>(false);
@@ -322,6 +362,21 @@ export default function ProjectsPage() {
     loadWorkspaceData();
   }, [loadWorkspaceData]);
 
+  // NEW: apply the default view and order chosen in Account Settings
+  useEffect(() => {
+    try {
+      const savedView = localStorage.getItem("cognitive_pref_view");
+      if (savedView === "grid" || savedView === "list") setViewMode(savedView);
+
+      const savedSort = localStorage.getItem("cognitive_pref_sort");
+      if (savedSort && ["newest", "oldest", "name", "docs"].includes(savedSort)) {
+        setSortBy(savedSort);
+      }
+    } catch {
+  // Ignored: the normal defaults are used
+    }
+  }, []);
+
   // Map tasks by project
   const projectTasksMap = useMemo(() => {
     const map: Record<string, Task[]> = {};
@@ -342,6 +397,7 @@ export default function ProjectsPage() {
         setProjectToDelete(null);
         setProjectDetail(null);
         setIsInlineAddTaskOpen(false);
+        setProjectToEdit(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -465,6 +521,62 @@ export default function ProjectsPage() {
     showToast(`Project "${targetName}" removed.`);
   };
 
+    // NEW: open the edit popup with the current values filled in
+  const openEditModal = (project: Project) => {
+    setEditForm({
+      category: project.category,
+      tags: Array.isArray(project.tags) ? project.tags.join(", ") : "",
+      source_url: project.source_url || "",
+      description: project.description || ""
+    });
+    setProjectToEdit(project);
+  };
+
+  // NEW: save the edited project
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!projectToEdit) return;
+
+    setSavingEdit(true);
+    const parsedTags = editForm.tags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const changes = {
+      description: editForm.description.trim(),
+      category: editForm.category,
+      tags: parsedTags.length > 0 ? parsedTags : [editForm.category],
+      source_url: editForm.source_url.trim() || null
+    };
+
+    let savedToSupabase = false;
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .update(changes)
+        .eq("id", projectToEdit.id)
+        .select();
+      if (!error && Array.isArray(data) && data.length > 0) savedToSupabase = true;
+    } catch {
+      // Ignored: the page is still updated below
+    }
+
+    const updated = projects.map((p) =>
+      p.id === projectToEdit.id ? { ...p, ...changes } : p
+    );
+    saveLocalProjects(updated);
+
+    const editedName = projectToEdit.name;
+    setSavingEdit(false);
+    setProjectToEdit(null);
+    showToast(
+      savedToSupabase
+        ? `Project "${editedName}" updated.`
+        : `Project "${editedName}" updated (saved in this browser only).`
+    );
+  };
+
   // Add Task directly inside project detail
   const handleInlineAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -530,6 +642,31 @@ export default function ProjectsPage() {
     return matchesCategory && matchesSearch;
   });
 
+    // NEW: order the filtered projects (newest, oldest, name or most docs)
+  const sortedProjects = [...filteredProjects].sort((a, b) => {
+    if (sortBy === "oldest") {
+      return (new Date(a.created_at).getTime() || 0) - (new Date(b.created_at).getTime() || 0);
+    }
+    if (sortBy === "name") {
+      return a.name.localeCompare(b.name);
+    }
+    if (sortBy === "docs") {
+      return (b.documents_count || 0) - (a.documents_count || 0);
+    }
+    // default: newest first
+    return (new Date(b.created_at).getTime() || 0) - (new Date(a.created_at).getTime() || 0);
+  });
+
+  
+  // Only count the tasks that belong to the projects shown on this page
+  const shownProjectKeys = new Set(projects.flatMap((p) => [p.id, p.name]));
+  const shownTasks = tasks.filter(
+    (t) => shownProjectKeys.has(t.project_id) || shownProjectKeys.has(t.project_name)
+  );
+  const totalTasks = shownTasks.length;
+  const doneTasks = shownTasks.filter((t) => t.stage === "done").length;
+  const activeTasks = shownTasks.filter((t) => t.stage === "in_progress").length;
+  const completedPercent = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
   const detailProjectTasks = useMemo(() => {
     if (!projectDetail) return [];
     return tasks.filter(
@@ -581,21 +718,66 @@ export default function ProjectsPage() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Workspace Projects
+              Projects
             </h1>
-            {supabaseConnected === true && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Supabase Live
-              </span>
-            )}
+            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
+              {projects.length}
+            </span>
+            <span
+              title={
+                supabaseConnected === true
+                  ? "Connected to the database"
+                  : "Working offline (saved in this browser only)"
+              }
+              className={`h-2 w-2 rounded-full ${
+                supabaseConnected === true ? "bg-emerald-400" : "bg-amber-400"
+              }`}
+            />
+            
           </div>
           <p className="text-xs sm:text-sm text-zinc-400">
-            Cognitive document repositories, task workflows, and Gemini multi-agent knowledge graphs.
+            Your workspaces for documents, tasks and AI conversations. Open a project to see its tasks.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5">
+          <div className="flex items-center rounded-xl border border-zinc-800 bg-zinc-900/80 p-0.5">
+            <button
+              onClick={() => setViewMode("grid")}
+              title="Grid view"
+              aria-label="Grid view"
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                viewMode === "grid" ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-200"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              title="List view"
+              aria-label="List view"
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                viewMode === "list" ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-200"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sort projects"
+            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name">Name A-Z</option>
+            <option value="docs">Most documents</option>
+          </select>
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
@@ -605,6 +787,38 @@ export default function ProjectsPage() {
             </svg>
             <span>New Project</span>
           </button>
+        </div>
+      </div>
+      {/* NEW: stats row */}
+      <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Projects</p>
+          <p className="mt-1 text-2xl font-bold text-white">{projects.length}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500">in your workspace</p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Total tasks</p>
+          <p className="mt-1 text-2xl font-bold text-white">{totalTasks}</p>
+          <p className="mt-0.5 text-[11px] text-amber-300/80">{activeTasks} in progress</p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Completed</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-400">{completedPercent}%</p>
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+              style={{ width: `${completedPercent}%` }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-zinc-500">{doneTasks} of {totalTasks} tasks done</p>
+        </div>
+
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Team members</p>
+          <p className="mt-1 text-2xl font-bold text-white">{members.length}</p>
+          <p className="mt-0.5 text-[11px] text-zinc-500">in the whole workspace</p>
         </div>
       </div>
 
@@ -653,14 +867,38 @@ export default function ProjectsPage() {
           <div className="rounded-2xl border border-dashed border-zinc-800 p-12 text-center">
             <p className="text-sm font-semibold text-zinc-300">No projects found</p>
             <p className="mt-1 text-xs text-zinc-500">
-              Try adjusting your filter or search query.
+              {searchQuery || selectedCategory !== "All"
+                ? "Try a different search or filter."
+                : "Create your first project to get started."}
             </p>
+            {!searchQuery && selectedCategory === "All" && (
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="mt-4 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white cursor-pointer"
+              >
+                + Create Project
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredProjects.map((project) => {
+        <div
+            className={
+              viewMode === "grid"
+                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+                : "grid grid-cols-1 gap-3"
+            }
+          >
+            {sortedProjects.map((project) => {
               const projectTasks = projectTasksMap[project.name] || projectTasksMap[project.id] || [];
               const inProgressCount = projectTasks.filter((t) => t.stage === "in_progress").length;
+              // NEW: how many tasks of this project are finished
+              const doneCount = projectTasks.filter((t) => t.stage === "done").length;
+              // NEW: the people working on this project (shown as small avatars on the card)
+              const projectTeam = getProjectTeam(project, members, projectTasks);
+              const progressPercent =
+                projectTasks.length === 0
+                  ? 0
+                  : Math.round((doneCount / projectTasks.length) * 100);
 
               return (
                 <div
@@ -707,7 +945,7 @@ export default function ProjectsPage() {
                     </p>
 
                     {/* Source URL if present */}
-                    {project.source_url && (
+                    {project.source_url && /^https?:\/\//i.test(project.source_url) && (
                       <div className="mt-3 flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 truncate">
                         <svg className="w-3.5 h-3.5 text-zinc-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -730,6 +968,63 @@ export default function ProjectsPage() {
                         <span>&rarr;</span>
                       </Link>
                     </div>
+
+                    {/* NEW: progress bar (finished tasks / all tasks of this project) */}
+                    <div className="mt-3.5">
+                      <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                        <span>Progress</span>
+                        <span className={progressPercent === 100 ? "text-emerald-400" : "text-zinc-400"}>
+                          {projectTasks.length === 0
+                            ? "No tasks yet"
+                            : `${doneCount}/${projectTasks.length} done (${progressPercent}%)`}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            progressPercent === 100
+                              ? "bg-emerald-400"
+                              : "bg-linear-to-r from-indigo-500 to-sky-400"
+                          }`}
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* NEW: team avatars (first 4 people, then a "+N" circle) */}
+                    <div className="mt-3 flex items-center gap-2">
+                      {projectTeam.length === 0 ? (
+                        <span className="text-[10px] font-mono text-zinc-600">No team yet</span>
+                      ) : (
+                        <>
+                          {/* -space-x-2 makes the circles overlap like a stack */}
+                          <div className="flex -space-x-2">
+                            {projectTeam.slice(0, 4).map((m) => (
+                              <div
+                                key={m.id}
+                                title={`${m.name} (${m.role_title})`}
+                                className={`h-6 w-6 rounded-full bg-linear-to-tr ${m.avatar_color} ring-2 ring-zinc-900 flex items-center justify-center text-[9px] font-bold text-white`}
+                              >
+                                {/* Initials, e.g. "Alex Rivera" -> "AR" */}
+                                {m.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                              </div>
+                            ))}
+                            {projectTeam.length > 4 && (
+                              <div className="h-6 w-6 rounded-full bg-zinc-800 ring-2 ring-zinc-900 flex items-center justify-center text-[9px] font-mono text-zinc-300">
+                                +{projectTeam.length - 4}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[10px] font-mono text-zinc-500">
+                            {projectTeam.length} {projectTeam.length === 1 ? "member" : "members"}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    
+
+                    
 
                     {/* Tags */}
                     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -769,6 +1064,20 @@ export default function ProjectsPage() {
                       >
                         Gemini &rarr;
                       </Link>
+
+                      {/* Edit Project Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(project);
+                        }}
+                        className="p-1 rounded text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/40 transition cursor-pointer"
+                        title="Edit Project"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
 
                       {/* Remove Project Button */}
                       <button
@@ -1239,6 +1548,103 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      
+      {/* EDIT PROJECT MODAL */}
+      {projectToEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-scale-up">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <h2 className="text-lg font-bold text-white">Edit Project</h2>
+              <button
+                type="button"
+                onClick={() => setProjectToEdit(null)}
+                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSave} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Project Name</label>
+                <input
+                  type="text"
+                  value={projectToEdit.name}
+                  disabled
+                  className="w-full rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-500 cursor-not-allowed"
+                />
+                <p className="mt-1 text-[10px] text-zinc-500">
+                  The name cannot be changed because tasks are linked to it.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Category</label>
+                <select
+                  value={editForm.category}
+                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="Agentic Workflow">Agentic Workflow (LangGraph)</option>
+                  <option value="Semantic Search">Semantic Search (pgvector & Supabase)</option>
+                  <option value="Document Extraction">Document Extraction (PDF/Web Scraper)</option>
+                  <option value="API Automation">API Automation (FastAPI Engine)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Tags (comma separated)</label>
+                <input
+                  type="text"
+                  value={editForm.tags}
+                  onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Source URL (Optional)</label>
+                <input
+                  type="text"
+                  value={editForm.source_url}
+                  onChange={(e) => setEditForm({ ...editForm, source_url: e.target.value })}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setProjectToEdit(null)}
+                  className="px-4 py-2 rounded-lg border border-zinc-700 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md disabled:opacity-50 cursor-pointer"
+                >
+                  {savingEdit ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* ============================================================ */}
       {/* DELETE CONFIRMATION MODAL */}
       {/* ============================================================ */}
