@@ -333,6 +333,23 @@ export default function ProjectTasksPage({
 
   const STAGES: TaskStage[] = ["todo", "in_progress", "review", "done"];
 
+  // NEW: numbers used by the progress bar.
+  // "tasks" holds only the tasks of THIS project, so no extra filtering is needed.
+  const totalTasks = tasks.length;
+  const doneTasks = tasks.filter((t) => t.stage === "done").length;
+  // 0 tasks -> 0% (avoids dividing by zero), otherwise rounded percentage
+  const progressPercent =
+    totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100);
+
+  // NEW: the people working on this project.
+  // A member counts when the project is in their "assigned_projects" list,
+  // or when a task of this project is assigned to them.
+  const projectTeam = members.filter(
+    (m) =>
+      m.assigned_projects?.includes(project?.name ?? "") ||
+      tasks.some((t) => t.assigned_to_id === m.id)
+  );
+
   if (!loading && !project) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
@@ -421,6 +438,69 @@ export default function ProjectTasksPage({
               </button>
             </div>
           </div>
+          {/* NEW: Progress bar. Shows how much of this project is finished. */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-zinc-400">Progress</span>
+              {/* Text on the right, e.g. "6 of 10 tasks done (60%)" */}
+              <span className={progressPercent === 100 ? "text-emerald-400 font-semibold" : "text-zinc-300"}>
+                {totalTasks === 0
+                  ? "No tasks yet"
+                  : `${doneTasks} of ${totalTasks} tasks done (${progressPercent}%)`}
+              </span>
+            </div>
+            {/* Grey track. role="progressbar" lets screen readers announce the value. */}
+            <div
+              role="progressbar"
+              aria-label="Project progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPercent}
+              className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-800"
+            >
+              {/* Colored fill. Width = progress %. Green when everything is done. */}
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  progressPercent === 100
+                    ? "bg-emerald-400"
+                    : "bg-linear-to-r from-indigo-500 to-sky-400"
+                }`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+
+          {/* NEW: team of this project (avatars; hover to read the name) */}
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-xs font-mono text-zinc-400">Team</span>
+            {projectTeam.length === 0 ? (
+              <span className="text-xs font-mono text-zinc-600">No team members yet</span>
+            ) : (
+              <>
+                <div className="flex -space-x-2">
+                  {projectTeam.slice(0, 6).map((m) => (
+                    <div
+                      key={m.id}
+                      title={`${m.name} (${m.role_title})`}
+                      className={`h-7 w-7 rounded-full bg-linear-to-tr ${m.avatar_color} ring-2 ring-zinc-900 flex items-center justify-center text-[10px] font-bold text-white`}
+                    >
+                      {m.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                    </div>
+                  ))}
+                  {projectTeam.length > 6 && (
+                    <div className="h-7 w-7 rounded-full bg-zinc-800 ring-2 ring-zinc-900 flex items-center justify-center text-[10px] font-mono text-zinc-300">
+                      +{projectTeam.length - 6}
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs font-mono text-zinc-500">
+                  {projectTeam.length} {projectTeam.length === 1 ? "member" : "members"}
+                </span>
+              </>
+            )}
+          </div>
+
+          
 
           {/* Project Sub-stats */}
           <div className="mt-4 flex flex-wrap items-center gap-6 text-xs font-mono text-zinc-400">
