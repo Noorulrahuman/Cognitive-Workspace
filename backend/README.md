@@ -20,3 +20,8 @@ Health Check: http://127.0.0.1:8000/api/v1/health
 Workspace Status: http://127.0.0.1:8000/api/v1/workspace/status
 Interactive Swagger UI: http://127.0.0.1:8000/docs
 ReDoc UI: http://127.0.0.1:8000/redoc
+
+
+# Open Your .env file and add your Gemini API key - see .env.example as sample
+# And run 
+uv run python app\agents\gemini_config.py

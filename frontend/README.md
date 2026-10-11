@@ -49,7 +49,6 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
-
 ### Current Frontend Updates
 
 - Enhanced the main workspace UI and global styling.
@@ -57,3 +56,45 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Enhanced the Projects workspace with project creation, details, deletion, and data persistence support.
 - Enhanced the Copilot chat workspace with project selection, starter prompts, message interactions, and response actions.
 - Refined the Login page UI and authentication flow.
+
+### What we changed
+- **Navbar**: gold animated brand text, active link highlight (also on sub-pages), live API status pill, loading skeleton, sign-out redirect, accessibility labels, "AI Copilot" renamed to "Gemini".
+- **Home**: health check with timeout, accepts both `ok` and `healthy`, API Docs link only in development.
+- **Projects**: colored project icons, clean cards (website name instead of full link, max 3 tags + "+N"), readable dates, progress bar (finished / total tasks), team avatars, sorting, Esc closes popups.
+- **Requirements**: live backend status (Checking / Online / Unavailable), simulator timers cleaned up.
+- **Chat**: "Demo" badge while replies are simulated, project picker stays in sync with the URL.
+- **Login**: fixed the "Register" link opening the Sign In form, passwords must be at least 8 characters, gold brand text.
+- **Global**: all backend URLs read from `NEXT_PUBLIC_API_URL` (no hardcoded localhost), shared fonts and animations in `globals.css`, explanatory code comments.
+## Frontend Updates (UI)
+
+### Projects page
+- **Edit project**: change description, category, tags and link from a pencil button on each card.
+- **Sort**: Newest, Oldest, Name A-Z, Most documents.
+- **Grid / List view**: switch between 3 cards per row and 1 card per row.
+- **Stats row**: total projects, tasks, completed % and team size at a glance.
+- **Progress bar and team avatars** on every project card.
+- **Smart empty state**: a helpful message when search or a filter finds nothing.
+- **Source link** shows only when it is a real http(s) link.
+- Cleaner header with a project count and a connection status dot.
+
+### Gemini chat page
+- New welcome screen with 3 starter prompts.
+- **New chat** and **Copy answer** buttons.
+- Collapsible **"How I got this answer"** section.
+- Typing animation and a **Demo** badge. It uses sample replies until the backend chat endpoint is connected.
+
+### Navbar
+- Simplified to Overview, Projects, Members and Gemini.
+- Removed unused tabs and settings.
+- Added an **Account Settings** link for signed-in users.
+
+### Account Settings (`/settings`)
+- **Profile**: change your name. Email is shown read-only.
+- **Password**: set a new password, with validation.
+- **Preferences**: choose the default view (Grid/List) and default order for the Projects page.
+- **Your data**: export your projects as `my-projects.json` or clear the saved browser data.
+- **Devices**: sign out from all devices.
+- **Sign out**.
+
+### Tech
+Next.js (App Router), React, TypeScript, Tailwind CSS, Supabase Auth.
