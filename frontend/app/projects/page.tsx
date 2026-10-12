@@ -60,6 +60,30 @@ function formatDate(iso: string): string {
   });
 }
 
+
+// NEW: small coloured label that shows how close a task deadline is
+function getDueChip(iso: string, stage: string): { text: string; style: string } | null {
+  if (!iso || stage === "done") return null;
+  const due = new Date(iso);
+  if (isNaN(due.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  due.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+
+  if (days < 0) {
+    return { text: `Overdue by ${-days} day${days === -1 ? "" : "s"}`, style: "border-rose-500/30 bg-rose-500/10 text-rose-300" };
+  }
+  if (days === 0) {
+    return { text: "Due today", style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+  }
+  if (days <= 3) {
+    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+  }
+  return { text: `Due in ${days} days`, style: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" };
+}
+
 // NEW: finds the people working on a project.
 // A member counts as part of the team when the project is in their
 // "assigned_projects" list, OR when at least one task of the project is assigned to them.
@@ -1299,6 +1323,7 @@ export default function ProjectsPage() {
                   {detailProjectTasks.map((task) => {
                     const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
                     const stageConf = STAGE_CONFIG[task.stage];
+                    const dueChip = getDueChip(task.due_date, task.stage);
 
                     return (
                       <div
@@ -1313,6 +1338,11 @@ export default function ProjectsPage() {
                             <span className="text-xs font-semibold text-white truncate">
                               {task.title}
                             </span>
+                            {dueChip && (
+                              <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono ${dueChip.style}`}>
+                                {dueChip.text}
+                              </span>
+                            )}
                           </div>
                           <div className="mt-1 flex items-center gap-3 text-[10px] font-mono text-zinc-400">
                             <span>Assignee: <strong className="text-zinc-200">{task.assigned_to_name || "Unassigned"}</strong></span>
