@@ -640,3 +640,31 @@ export async function deleteWorkspaceTask(
 
   return filtered;
 }
+
+// ==============================================================================
+// TYPED SUPABASE DATABASE TYPES & CRUD SERVICES
+// ==============================================================================
+
+export type {
+  Database,
+  ProjectRow,
+  ProjectInsert,
+  ProjectUpdate,
+  TaskRow,
+  TaskInsert,
+  TaskUpdate,
+  ProjectStatus,
+} from "../types/supabase";
+
+export {
+  getProjects,
+  getProjectById,
+  createProject,
+  updateProject,
+  deleteProject,
+  getTasks,
+  getTaskById,
+  createTask,
+  updateTask,
+  deleteTask,
+} from "../lib/services/projectTaskService";
