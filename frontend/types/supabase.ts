@@ -7,7 +7,7 @@ export type Json =
   | Json[];
 
 export type ProjectStatus = "active" | "completed" | "archived";
-export type TaskStatus = "pending" | "in_progress" | "completed";
+export type TaskStatus = "todo" | "in_progress" | "completed" | "pending";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 export interface Database {
@@ -17,7 +17,8 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
-          title: string;
+          name: string;
+          title?: string;
           description: string | null;
           status: ProjectStatus;
           created_at: string;
@@ -26,7 +27,8 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
-          title: string;
+          name: string;
+          title?: string;
           description?: string | null;
           status?: ProjectStatus;
           created_at?: string;
@@ -35,6 +37,7 @@ export interface Database {
         Update: {
           id?: string;
           user_id?: string;
+          name?: string;
           title?: string;
           description?: string | null;
           status?: ProjectStatus;
