@@ -293,13 +293,19 @@ export default function ProjectsPage() {
         setSupabaseNotice(null);
 
         if (data.length > 0) {
-          const formatted = data.map((item) => ({
+          const formatted = data.map((item: any) => ({
             ...item,
+            name: item.title || item.name || "Untitled Project",
+            title: item.title || item.name || "Untitled Project",
+            description: item.description ?? "",
+            category: item.category || "Agentic Workflow",
+            status: (item.status || "active").toLowerCase() === "active" ? "Active" : item.status,
+            documents_count: item.documents_count || 0,
             tags: Array.isArray(item.tags)
               ? item.tags
               : typeof item.tags === "string"
               ? item.tags.replace(/[{}]/g, "").split(",").filter(Boolean)
-              : []
+              : ["Agentic Workflow"]
           }));
           setProjects(formatted);
           saveLocalProjects(formatted);
@@ -417,12 +423,13 @@ export default function ProjectsPage() {
 
     const projectPayload = {
       name: formData.name.trim(),
+      title: formData.name.trim(),
       description: formData.description.trim() || "Cognitive pipeline workspace project.",
       category: formData.category,
       tags: parsedTags.length > 0 ? parsedTags : [formData.category],
       source_url: formData.source_url.trim() || null,
       documents_count: formData.source_url.trim() ? 1 : 0,
-      status: "Active",
+      status: "active",
       user_id: user?.id || null
     };
 
@@ -439,7 +446,10 @@ export default function ProjectsPage() {
       if (!error && data) {
         createdProject = {
           ...data,
-          tags: Array.isArray(data.tags) ? data.tags : projectPayload.tags
+          name: (data as any).title || (data as any).name || projectPayload.name,
+          title: (data as any).title || (data as any).name || projectPayload.name,
+          status: "Active",
+          tags: Array.isArray((data as any).tags) ? (data as any).tags : projectPayload.tags
         } as Project;
         savedToSupabase = true;
         setSupabaseConnected(true);
@@ -613,14 +623,28 @@ export default function ProjectsPage() {
     showToast(`Task "${newTask.title}" added to ${projectDetail.name}.`);
   };
 
-  // Quick Advance Task Stage inside project detail
+  // Quick Advance Task Stage inside project detail (optimistic update so task never vanishes)
   const handleAdvanceTaskStage = async (task: Task) => {
     const order: TaskStage[] = ["todo", "in_progress", "review", "done"];
     const idx = order.indexOf(task.stage);
     const nextStage = order[(idx + 1) % order.length];
-    const updated = await updateWorkspaceTask(task.id, { stage: nextStage }, supabase);
-    setTasks(updated);
+
+    // 1. Optimistically update local React state immediately
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === task.id
+          ? { ...t, stage: nextStage, updated_at: new Date().toISOString() }
+          : t
+      )
+    );
     showToast(`Task moved to ${STAGE_CONFIG[nextStage].label}.`);
+
+    // 2. Persist in background
+    try {
+      await updateWorkspaceTask(task.id, { stage: nextStage }, supabase);
+    } catch {
+      // Ignored
+    }
   };
 
   const handleCopySql = () => {
