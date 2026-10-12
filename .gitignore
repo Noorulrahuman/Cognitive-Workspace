@@ -16,3 +16,7 @@ dist/
 
 # IDE
 .vscode/
+
+# Supabase Local Cache
+supabase/.temp/
+.temp/

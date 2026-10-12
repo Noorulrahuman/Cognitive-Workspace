@@ -20,7 +20,7 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE IF NOT EXISTS public.projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
+    name TEXT NOT NULL,
     description TEXT,
     category TEXT DEFAULT 'Agentic Workflow',
     tags TEXT[] DEFAULT ARRAY[]::TEXT[],
@@ -45,16 +45,18 @@ CREATE TRIGGER trigger_projects_updated_at
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
-CREATE POLICY "Users can view own projects" ON public.projects FOR SELECT USING (auth.uid() = user_id OR auth.uid() IS NULL);
-
 DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
-CREATE POLICY "Users can insert own projects" ON public.projects FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
-
 DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
-CREATE POLICY "Users can update own projects" ON public.projects FOR UPDATE USING (auth.uid() = user_id OR auth.uid() IS NULL) WITH CHECK (auth.uid() = user_id OR auth.uid() IS NULL);
-
 DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
-CREATE POLICY "Users can delete own projects" ON public.projects FOR DELETE USING (auth.uid() = user_id OR auth.uid() IS NULL);
+DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
+
+CREATE POLICY "projects_select_policy" ON public.projects FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "projects_insert_policy" ON public.projects FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "projects_update_policy" ON public.projects FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "projects_delete_policy" ON public.projects FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
 -- 2. Table: public.members (Separates Managers and Developers)
 CREATE TABLE IF NOT EXISTS public.members (
@@ -113,16 +115,27 @@ CREATE TRIGGER trigger_tasks_updated_at
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Users can view own tasks" ON public.tasks;
-CREATE POLICY "Users can view own tasks" ON public.tasks FOR SELECT USING (auth.uid() = user_id OR auth.uid() IS NULL);
-
 DROP POLICY IF EXISTS "Users can insert own tasks" ON public.tasks;
-CREATE POLICY "Users can insert own tasks" ON public.tasks FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
-
 DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
-CREATE POLICY "Users can update own tasks" ON public.tasks FOR UPDATE USING (auth.uid() = user_id OR auth.uid() IS NULL) WITH CHECK (auth.uid() = user_id OR auth.uid() IS NULL);
-
 DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
-CREATE POLICY "Users can delete own tasks" ON public.tasks FOR DELETE USING (auth.uid() = user_id OR auth.uid() IS NULL);
+DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
+
+-- Enforce ownership inheritance through projects
+CREATE POLICY "tasks_select_policy" ON public.tasks FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+
+CREATE POLICY "tasks_insert_policy" ON public.tasks FOR INSERT TO authenticated
+    WITH CHECK (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+
+CREATE POLICY "tasks_update_policy" ON public.tasks FOR UPDATE TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()))
+    WITH CHECK (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+
+CREATE POLICY "tasks_delete_policy" ON public.tasks FOR DELETE TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
 
 -- 4. Initial Seed Projects
 INSERT INTO public.projects (id, name, description, category, tags, source_url, documents_count, status, created_at)
