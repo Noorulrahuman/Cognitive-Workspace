@@ -3,17 +3,30 @@
 -- Unified schema for Projects, Workspace Members, and Project Tasks
 -- ==============================================================================
 
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Function: handle_updated_at
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = timezone('utc', now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- 1. Table: public.projects
 CREATE TABLE IF NOT EXISTS public.projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
-    description TEXT DEFAULT '',
+    description TEXT,
     category TEXT DEFAULT 'Agentic Workflow',
     tags TEXT[] DEFAULT ARRAY[]::TEXT[],
     source_url TEXT,
     documents_count INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'Active',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived', 'Active')),
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -22,12 +35,28 @@ CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_projects_category ON public.projects(category);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON public.projects(created_at DESC);
 
+-- BEFORE UPDATE Trigger for projects
+DROP TRIGGER IF EXISTS trigger_projects_updated_at ON public.projects;
+CREATE TRIGGER trigger_projects_updated_at
+    BEFORE UPDATE ON public.projects
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
-CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
+DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
+DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
+DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
+
+CREATE POLICY "projects_select_policy" ON public.projects FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "projects_insert_policy" ON public.projects FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "projects_update_policy" ON public.projects FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "projects_delete_policy" ON public.projects FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
 -- 2. Table: public.members (Separates Managers and Developers)
 CREATE TABLE IF NOT EXISTS public.members (
@@ -54,33 +83,59 @@ CREATE POLICY "Allow delete members" ON public.members FOR DELETE USING (true);
 
 -- 3. Table: public.tasks (Task Stage, Priority, Member Assignment, Due Date, Descriptive Paths)
 CREATE TABLE IF NOT EXISTS public.tasks (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    project_name TEXT NOT NULL,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed')),
     priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-    stage TEXT NOT NULL DEFAULT 'todo' CHECK (stage IN ('todo', 'in_progress', 'review', 'done')),
+    due_date TIMESTAMPTZ,
+    stage TEXT DEFAULT 'todo' CHECK (stage IN ('todo', 'in_progress', 'review', 'done')),
+    project_name TEXT,
+    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
     assigned_to_id TEXT,
     assigned_to_name TEXT,
     assigned_to_role TEXT,
-    due_date DATE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON public.tasks(project_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_stage ON public.tasks(stage);
+CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON public.tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON public.tasks(priority);
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to_id ON public.tasks(assigned_to_id);
+
+-- BEFORE UPDATE Trigger for tasks
+DROP TRIGGER IF EXISTS trigger_tasks_updated_at ON public.tasks;
+CREATE TRIGGER trigger_tasks_updated_at
+    BEFORE UPDATE ON public.tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
-CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);
+DROP POLICY IF EXISTS "Users can view own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can insert own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
+
+-- Enforce ownership inheritance through projects
+CREATE POLICY "tasks_select_policy" ON public.tasks FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+
+CREATE POLICY "tasks_insert_policy" ON public.tasks FOR INSERT TO authenticated
+    WITH CHECK (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+
+CREATE POLICY "tasks_update_policy" ON public.tasks FOR UPDATE TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()))
+    WITH CHECK (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+
+CREATE POLICY "tasks_delete_policy" ON public.tasks FOR DELETE TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
 
 -- 4. Initial Seed Projects
 INSERT INTO public.projects (id, name, description, category, tags, source_url, documents_count, status, created_at)

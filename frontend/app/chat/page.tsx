@@ -104,9 +104,14 @@ function ChatContent() {
     async function fetchProjectNames() {
       try {
         const supabase = createClient();
-        const { data, error } = await supabase.from("projects").select("name").order("name");
+        const { data, error } = await supabase.from("projects").select("*");
         if (!error && data && data.length > 0) {
-          const names = Array.from(new Set([...data.map((p) => p.name), GENERAL_PROJECT]));
+          const names = Array.from(
+            new Set([
+              ...data.map((p: any) => p.title || p.name).filter(Boolean),
+              GENERAL_PROJECT,
+            ])
+          );
           setProjectsList(names);
           return;
         }
