@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import { createProject, updateProject, deleteProject } from "./actions";
 import {
   Task,
   TaskStage,
@@ -19,6 +20,10 @@ import {
 } from "@/utils/workspaceData";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+
+// NEW: true when a Server Action failed because of the database (the page may then continue locally)
+const isDatabaseProblem = (error: string) =>
+  error.startsWith("Could not") || error.startsWith("Project not found");
 
 const PROJECT_COLORS = [
   "from-indigo-500 to-violet-500",
@@ -453,24 +458,28 @@ export default function ProjectsPage() {
     let createdProject: Project | null = null;
     let savedToSupabase = false;
 
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .insert([projectPayload])
-        .select()
-        .single();
+    // CHANGED: create through the secure Server Action
+    const result = await createProject({
+      name: projectPayload.name,
+      description: projectPayload.description,
+      category: projectPayload.category,
+      tags: projectPayload.tags,
+      source_url: projectPayload.source_url,
+    });
 
-      if (!error && data) {
-        createdProject = {
-          ...data,
-          tags: Array.isArray(data.tags) ? data.tags : projectPayload.tags
-        } as Project;
-        savedToSupabase = true;
-        setSupabaseConnected(true);
-        setSupabaseNotice(null);
-      }
-    } catch {
-      // Ignored
+    if (result.success) {
+      createdProject = {
+        ...result.data,
+        tags: Array.isArray(result.data.tags) ? result.data.tags : projectPayload.tags,
+      } as Project;
+      savedToSupabase = true;
+      setSupabaseConnected(true);
+      setSupabaseNotice(null);
+    } else if (!isDatabaseProblem(result.error)) {
+      // Sign-in or validation problem: tell the user and stop
+      showToast(result.error);
+      setSubmitting(false);
+      return;
     }
 
     if (!createdProject) {
@@ -526,12 +535,14 @@ export default function ProjectsPage() {
     if (!projectToDelete) return;
     const targetId = projectToDelete.id;
     const targetName = projectToDelete.name;
-
-    try {
-      await supabase.from("projects").delete().eq("id", targetId);
-    } catch {
-      // Ignore
+  // CHANGED: delete through the secure Server Action
+    const result = await deleteProject(targetId);
+    if (!result.success && !isDatabaseProblem(result.error)) {
+      showToast(result.error);
+      setProjectToDelete(null);
+      return;
     }
+
 
     try {
       await fetch(`${API_URL}/api/v1/projects/${targetId}`, { method: "DELETE" });
@@ -574,16 +585,22 @@ export default function ProjectsPage() {
       source_url: editForm.source_url.trim() || null
     };
 
+    // CHANGED: save through the secure Server Action
     let savedToSupabase = false;
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .update(changes)
-        .eq("id", projectToEdit.id)
-        .select();
-      if (!error && Array.isArray(data) && data.length > 0) savedToSupabase = true;
-    } catch {
-      // Ignored: the page is still updated below
+    const result = await updateProject(projectToEdit.id, {
+      name: projectToEdit.name,
+      description: changes.description,
+      category: changes.category,
+      tags: changes.tags,
+      source_url: changes.source_url,
+    });
+    if (result.success) {
+      savedToSupabase = true;
+    } else if (!isDatabaseProblem(result.error)) {
+      // Sign-in or validation problem: tell the user and stop
+      showToast(result.error);
+      setSavingEdit(false);
+      return;
     }
 
     const updated = projects.map((p) =>
@@ -702,7 +719,8 @@ export default function ProjectsPage() {
     <div className="min-h-full py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-zinc-900 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md">
+        
+        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-3 bg-zinc-900 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
           <p className="text-sm font-medium">{toastMessage}</p>
         </div>
