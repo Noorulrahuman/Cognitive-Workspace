@@ -97,6 +97,29 @@ function isOverdue(iso: string, stage: TaskStage): boolean {
   return due.getTime() < now.getTime() - 24 * 60 * 60 * 1000;
 }
 
+// NEW: small coloured label that shows how close a task deadline is
+function getDueChip(iso: string, stage: TaskStage): { text: string; style: string } | null {
+  if (!iso || stage === "done") return null;
+  const due = new Date(iso);
+  if (isNaN(due.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  due.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+
+  if (days < 0) {
+    return { text: `Overdue by ${-days} day${days === -1 ? "" : "s"}`, style: "border-rose-500/30 bg-rose-500/10 text-rose-300" };
+  }
+  if (days === 0) {
+    return { text: "Due today", style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+  }
+  if (days <= 3) {
+    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+  }
+  return { text: `Due in ${days} days`, style: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" };
+}
+
 function parsePathsString(str: string): string[] {
   return str
     .split(/[\n,]+/)
@@ -720,6 +743,7 @@ export default function ProjectTasksPage({
                         stageTasks.map((task) => {
                           const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
                           const overdue = isOverdue(task.due_date, task.stage);
+                          const dueChip = getDueChip(task.due_date, task.stage);
 
                           return (
                             <div
@@ -740,6 +764,13 @@ export default function ProjectTasksPage({
                                   Due: {formatDate(task.due_date)}
                                 </span>
                               </div>
+                              {dueChip && (
+                                <div>
+                                  <span className={`inline-block rounded border px-1.5 py-0.5 text-[9px] font-mono ${dueChip.style}`}>
+                                    {dueChip.text}
+                                  </span>
+                                </div>
+                              )}
 
                               {/* Title & Description */}
                               <div>

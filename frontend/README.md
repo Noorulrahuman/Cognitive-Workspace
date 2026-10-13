@@ -98,3 +98,8 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ### Tech
 Next.js (App Router), React, TypeScript, Tailwind CSS, Supabase Auth.
+
+### Project Server Actions
+
+- **Server Actions** for projects (create, list, update, delete) with login check and input validation.
+

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import { createProject, updateProject, deleteProject } from "./actions";
 import {
   Task,
   TaskStage,
@@ -19,6 +20,10 @@ import {
 } from "@/utils/workspaceData";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+
+// NEW: true when a Server Action failed because of the database (the page may then continue locally)
+const isDatabaseProblem = (error: string) =>
+  error.startsWith("Could not") || error.startsWith("Project not found");
 
 const PROJECT_COLORS = [
   "from-indigo-500 to-violet-500",
@@ -58,6 +63,30 @@ function formatDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+
+// NEW: small coloured label that shows how close a task deadline is
+function getDueChip(iso: string, stage: string): { text: string; style: string } | null {
+  if (!iso || stage === "done") return null;
+  const due = new Date(iso);
+  if (isNaN(due.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  due.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+
+  if (days < 0) {
+    return { text: `Overdue by ${-days} day${days === -1 ? "" : "s"}`, style: "border-rose-500/30 bg-rose-500/10 text-rose-300" };
+  }
+  if (days === 0) {
+    return { text: "Due today", style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+  }
+  if (days <= 3) {
+    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+  }
+  return { text: `Due in ${days} days`, style: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" };
 }
 
 // NEW: finds the people working on a project.
@@ -512,12 +541,14 @@ export default function ProjectsPage() {
     if (!projectToDelete) return;
     const targetId = projectToDelete.id;
     const targetName = projectToDelete.name;
-
-    try {
-      await supabase.from("projects").delete().eq("id", targetId);
-    } catch {
-      // Ignore
+  // CHANGED: delete through the secure Server Action
+    const result = await deleteProject(targetId);
+    if (!result.success && !isDatabaseProblem(result.error)) {
+      showToast(result.error);
+      setProjectToDelete(null);
+      return;
     }
+
 
     try {
       await fetch(`${API_URL}/api/v1/projects/${targetId}`, { method: "DELETE" });
@@ -560,16 +591,22 @@ export default function ProjectsPage() {
       source_url: editForm.source_url.trim() || null
     };
 
+    // CHANGED: save through the secure Server Action
     let savedToSupabase = false;
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .update(changes)
-        .eq("id", projectToEdit.id)
-        .select();
-      if (!error && Array.isArray(data) && data.length > 0) savedToSupabase = true;
-    } catch {
-      // Ignored: the page is still updated below
+    const result = await updateProject(projectToEdit.id, {
+      name: projectToEdit.name,
+      description: changes.description,
+      category: changes.category,
+      tags: changes.tags,
+      source_url: changes.source_url,
+    });
+    if (result.success) {
+      savedToSupabase = true;
+    } else if (!isDatabaseProblem(result.error)) {
+      // Sign-in or validation problem: tell the user and stop
+      showToast(result.error);
+      setSavingEdit(false);
+      return;
     }
 
     const updated = projects.map((p) =>
@@ -702,7 +739,8 @@ export default function ProjectsPage() {
     <div className="min-h-full py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-zinc-900 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md">
+        
+        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-3 bg-zinc-900 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
           <p className="text-sm font-medium">{toastMessage}</p>
         </div>
@@ -1323,6 +1361,7 @@ export default function ProjectsPage() {
                   {detailProjectTasks.map((task) => {
                     const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
                     const stageConf = STAGE_CONFIG[task.stage];
+                    const dueChip = getDueChip(task.due_date, task.stage);
 
                     return (
                       <div
@@ -1337,6 +1376,11 @@ export default function ProjectsPage() {
                             <span className="text-xs font-semibold text-white truncate">
                               {task.title}
                             </span>
+                            {dueChip && (
+                              <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono ${dueChip.style}`}>
+                                {dueChip.text}
+                              </span>
+                            )}
                           </div>
                           <div className="mt-1 flex items-center gap-3 text-[10px] font-mono text-zinc-400">
                             <span>Assignee: <strong className="text-zinc-200">{task.assigned_to_name || "Unassigned"}</strong></span>
