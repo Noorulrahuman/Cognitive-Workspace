@@ -195,9 +195,17 @@ export default function ProjectTasksPage({
       const { data } = await supabase
         .from("projects")
         .select("*")
-        .or(`id.eq.${projectId},name.eq.${projectId}`)
+        .or(`id.eq.${projectId},name.eq.${projectId},title.eq.${projectId}`)
         .single();
-      if (data) foundProj = data;
+      if (data) {
+        foundProj = {
+          ...data,
+          name: data.title || data.name || "Untitled Project",
+          category: data.category || "Agentic Workflow",
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          documents_count: data.documents_count || 0,
+        };
+      }
     } catch {
       // Supabase error
     }
@@ -207,7 +215,13 @@ export default function ProjectTasksPage({
       if (local) {
         try {
           const parsed: Project[] = JSON.parse(local);
-          foundProj = parsed.find((p) => p.id === projectId || p.name === projectId) || null;
+          foundProj =
+            parsed.find(
+              (p: any) =>
+                p.id === projectId ||
+                p.name === projectId ||
+                p.title === projectId
+            ) || null;
         } catch {
           // Parse error
         }
@@ -215,7 +229,10 @@ export default function ProjectTasksPage({
     }
 
     if (!foundProj) {
-      foundProj = DEFAULT_PROJECTS.find((p) => p.id === projectId || p.name === projectId) || null;
+      foundProj =
+        DEFAULT_PROJECTS.find(
+          (p) => p.id === projectId || p.name === projectId
+        ) || null;
     }
 
     setProject(foundProj);
@@ -231,7 +248,10 @@ export default function ProjectTasksPage({
     // Filter tasks strictly belonging to this project
     if (foundProj) {
       const projTasks = allTasks.filter(
-        (t) => t.project_id === foundProj!.id || t.project_name === foundProj!.name
+        (t) =>
+          t.project_id === foundProj!.id ||
+          t.project_name === foundProj!.name ||
+          (foundProj!.name && t.project_id === foundProj!.name)
       );
       setTasks(projTasks);
     }
@@ -277,17 +297,28 @@ export default function ProjectTasksPage({
     });
   }, [tasks, selectedStageFilter, selectedPriorityFilter, selectedAssigneeFilter, searchQuery]);
 
-  // Handle stage change
+  // Handle stage change (optimistic update so the task immediately moves without vanishing)
   const handleStageChange = async (taskId: string, newStage: TaskStage) => {
-    const updated = await updateWorkspaceTask(taskId, { stage: newStage }, supabase);
-    if (project) {
-      setTasks(
-        updated.filter((t) => t.project_id === project.id || t.project_name === project.name)
-      );
-    }
-    showToast(`Task moved to ${STAGE_CONFIG[newStage].label}.`);
+    // 1. Optimistically update local React state immediately
+    setTasks((prevTasks) =>
+      prevTasks.map((t) =>
+        t.id === taskId
+          ? { ...t, stage: newStage, updated_at: new Date().toISOString() }
+          : t
+      )
+    );
+
     if (taskDetail && taskDetail.id === taskId) {
-      setTaskDetail({ ...taskDetail, stage: newStage });
+      setTaskDetail((prev) => (prev ? { ...prev, stage: newStage } : null));
+    }
+
+    showToast(`Task moved to ${STAGE_CONFIG[newStage].label}.`);
+
+    // 2. Persist in background
+    try {
+      await updateWorkspaceTask(taskId, { stage: newStage }, supabase);
+    } catch {
+      // Ignored
     }
   };
 
@@ -317,7 +348,7 @@ export default function ProjectTasksPage({
       supabase
     );
 
-    setTasks((prev) => [newTask, ...prev]);
+    setTasks((prev) => [newTask, ...prev.filter((t) => t.id !== newTask.id)]);
     setIsAddModalOpen(false);
     setTaskForm({
       title: "",
@@ -335,24 +366,35 @@ export default function ProjectTasksPage({
   // Handle Update Task in Details Modal
   const handleUpdateTaskDetail = async (updates: Partial<Task>) => {
     if (!taskDetail || !project) return;
-    const updatedAll = await updateWorkspaceTask(taskDetail.id, updates, supabase);
-    setTasks(
-      updatedAll.filter((t) => t.project_id === project.id || t.project_name === project.name)
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskDetail.id
+          ? { ...t, ...updates, updated_at: new Date().toISOString() }
+          : t
+      )
     );
     setTaskDetail({ ...taskDetail, ...updates });
     showToast("Task updated.");
+
+    try {
+      await updateWorkspaceTask(taskDetail.id, updates, supabase);
+    } catch {
+      // Ignored
+    }
   };
 
   // Handle Delete Task
   const handleDeleteTask = async (taskId: string) => {
     if (!project) return;
-    if (!window.confirm("Delete this task? This cannot be undone.")) return;
-    const updatedAll = await deleteWorkspaceTask(taskId, supabase);
-    setTasks(
-      updatedAll.filter((t) => t.project_id === project.id || t.project_name === project.name)
-    );
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setTaskDetail(null);
     showToast("Task deleted.");
+
+    try {
+      await deleteWorkspaceTask(taskId, supabase);
+    } catch {
+      // Ignored
+    }
   };
 
   const STAGES: TaskStage[] = ["todo", "in_progress", "review", "done"];

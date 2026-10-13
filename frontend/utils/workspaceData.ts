@@ -510,37 +510,7 @@ export async function addWorkspaceMember(
   return memberWithId;
 }
 
-export async function fetchWorkspaceTasks(
-  supabase?: SupabaseClient
-): Promise<Task[]> {
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        saveTasksLocal(data);
-        return data;
-      }
-    } catch {
-      // Ignored
-    }
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/api/v1/tasks`);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        saveTasksLocal(data);
-        return data;
-      }
-    }
-  } catch {
-    // Offline
-  }
-
+export function getTasksLocal(): Task[] {
   if (typeof window !== "undefined") {
     const local = localStorage.getItem(LS_TASKS_KEY);
     if (local) {
@@ -552,8 +522,6 @@ export async function fetchWorkspaceTasks(
       }
     }
   }
-
-  saveTasksLocal(DEFAULT_TASKS);
   return DEFAULT_TASKS;
 }
 
@@ -567,28 +535,152 @@ export function saveTasksLocal(tasks: Task[]) {
   }
 }
 
-export async function createWorkspaceTask(
-  payload: Omit<Task, "id" | "created_at">,
-  supabase?: SupabaseClient
-): Promise<Task> {
-  const newTask: Task = {
-    ...payload,
-    id: `task-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
-    created_at: new Date().toISOString(),
-  };
+export function mapStageToStatus(stage?: TaskStage): "pending" | "in_progress" | "completed" {
+  if (stage === "done") return "completed";
+  if (stage === "in_progress" || stage === "review") return "in_progress";
+  return "pending";
+}
 
+export function mapStatusToStage(status?: string): TaskStage {
+  if (status === "completed") return "done";
+  if (status === "in_progress") return "in_progress";
+  if (status === "review") return "review";
+  return "todo";
+}
+
+export async function fetchWorkspaceTasks(
+  supabase?: SupabaseClient
+): Promise<Task[]> {
+  // 1. Supabase Cloud Sync
   if (supabase) {
     try {
-      await supabase.from("tasks").insert([newTask]);
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const localCurrent = getTasksLocal();
+        const localMap = new Map(localCurrent.map((t) => [t.id, t]));
+
+        const mapped: Task[] = data.map((t: any) => {
+          const localMatch = localMap.get(t.id);
+          return {
+            id: t.id,
+            project_id: t.project_id,
+            project_name: t.project_name || localMatch?.project_name || "Project",
+            title: t.title,
+            description: t.description ?? "",
+            descriptive_paths: t.descriptive_paths || localMatch?.descriptive_paths || [],
+            priority: (t.priority || "medium") as TaskPriority,
+            stage: t.stage || mapStatusToStage(t.status),
+            assigned_to_id: t.assigned_to_id || localMatch?.assigned_to_id || null,
+            assigned_to_name: t.assigned_to_name || localMatch?.assigned_to_name || null,
+            assigned_to_role: t.assigned_to_role || localMatch?.assigned_to_role || null,
+            due_date: t.due_date ? String(t.due_date).split("T")[0] : localMatch?.due_date || "",
+            created_at: t.created_at || new Date().toISOString(),
+            updated_at: t.updated_at || new Date().toISOString(),
+          };
+        });
+
+        // Merge any local-only tasks not yet in Supabase
+        const remoteIds = new Set(mapped.map((m) => m.id));
+        const merged = [...mapped, ...localCurrent.filter((l) => !remoteIds.has(l.id))];
+
+        saveTasksLocal(merged);
+        return merged;
+      }
     } catch {
       // Ignored
     }
   }
 
+  // 2. Local Storage Preservation (prevents newly created / updated tasks from being wiped)
   if (typeof window !== "undefined") {
-    const existing = await fetchWorkspaceTasks();
-    const updated = [newTask, ...existing];
-    saveTasksLocal(updated);
+    const local = localStorage.getItem(LS_TASKS_KEY);
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // Parse error
+      }
+    }
+  }
+
+  // 3. Backend Store Fallback
+  try {
+    const res = await fetch(`${API_URL}/api/v1/tasks`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        saveTasksLocal(data);
+        return data;
+      }
+    }
+  } catch {
+    // Offline
+  }
+
+  saveTasksLocal(DEFAULT_TASKS);
+  return DEFAULT_TASKS;
+}
+
+export async function createWorkspaceTask(
+  payload: Omit<Task, "id" | "created_at">,
+  supabase?: SupabaseClient,
+  userId?: string
+): Promise<Task> {
+  const generatedId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `task-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+  const newTask: Task = {
+    ...payload,
+    id: generatedId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  // Immediate local save
+  const currentLocal = getTasksLocal();
+  const updated = [newTask, ...currentLocal.filter((t) => t.id !== newTask.id)];
+  saveTasksLocal(updated);
+
+  // Supabase sync
+  if (supabase) {
+    try {
+      const dbPayload: Record<string, any> = {
+        id: newTask.id,
+        project_id: newTask.project_id,
+        title: newTask.title,
+        description: newTask.description,
+        status: mapStageToStatus(newTask.stage),
+        priority: newTask.priority,
+        due_date: newTask.due_date ? new Date(newTask.due_date).toISOString() : null,
+        created_at: newTask.created_at,
+        updated_at: newTask.updated_at,
+      };
+
+      if (userId) {
+        dbPayload.user_id = userId;
+      }
+
+      await supabase.from("tasks").insert([dbPayload]);
+    } catch {
+      // Ignored
+    }
+  }
+
+  // Backend sync if online
+  try {
+    await fetch(`${API_URL}/api/v1/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newTask),
+    });
+  } catch {
+    // Offline
   }
 
   return newTask;
@@ -599,24 +691,43 @@ export async function updateWorkspaceTask(
   updates: Partial<Task>,
   supabase?: SupabaseClient
 ): Promise<Task[]> {
-  const tasks = await fetchWorkspaceTasks();
-  const updatedTasks = tasks.map((t) =>
-    t.id === taskId
-      ? { ...t, ...updates, updated_at: new Date().toISOString() }
-      : t
+  const currentLocal = getTasksLocal();
+  const nowIso = new Date().toISOString();
+
+  const updatedTasks = currentLocal.map((t) =>
+    t.id === taskId ? { ...t, ...updates, updated_at: nowIso } : t
   );
 
   saveTasksLocal(updatedTasks);
 
+  // Supabase sync
   if (supabase) {
     try {
-      await supabase
-        .from("tasks")
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq("id", taskId);
+      const dbUpdates: Record<string, any> = {
+        ...updates,
+        updated_at: nowIso,
+      };
+      if (updates.stage) {
+        dbUpdates.status = mapStageToStatus(updates.stage);
+      }
+      if (updates.due_date) {
+        dbUpdates.due_date = new Date(updates.due_date).toISOString();
+      }
+      await supabase.from("tasks").update(dbUpdates).eq("id", taskId);
     } catch {
       // Ignored
     }
+  }
+
+  // Backend sync if online
+  try {
+    await fetch(`${API_URL}/api/v1/tasks/${taskId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+  } catch {
+    // Offline
   }
 
   return updatedTasks;
@@ -626,8 +737,8 @@ export async function deleteWorkspaceTask(
   taskId: string,
   supabase?: SupabaseClient
 ): Promise<Task[]> {
-  const tasks = await fetchWorkspaceTasks();
-  const filtered = tasks.filter((t) => t.id !== taskId);
+  const currentLocal = getTasksLocal();
+  const filtered = currentLocal.filter((t) => t.id !== taskId);
   saveTasksLocal(filtered);
 
   if (supabase) {
@@ -638,5 +749,39 @@ export async function deleteWorkspaceTask(
     }
   }
 
+  try {
+    await fetch(`${API_URL}/api/v1/tasks/${taskId}`, { method: "DELETE" });
+  } catch {
+    // Offline
+  }
+
   return filtered;
 }
+
+// ==============================================================================
+// TYPED SUPABASE DATABASE TYPES & CRUD SERVICES
+// ==============================================================================
+
+export type {
+  Database,
+  ProjectRow,
+  ProjectInsert,
+  ProjectUpdate,
+  TaskRow,
+  TaskInsert,
+  TaskUpdate,
+  ProjectStatus,
+} from "../types/supabase";
+
+export {
+  getProjects,
+  getProjectById,
+  createProject,
+  updateProject,
+  deleteProject,
+  getTasks,
+  getTaskById,
+  createTask,
+  updateTask,
+  deleteTask,
+} from "../lib/services/projectTaskService";
