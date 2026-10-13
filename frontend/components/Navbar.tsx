@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import BackendStatus from "@/components/BackendStatus";
 
 /* ==========================================================================
  * Navbar: Industry-grade Top Navigation Bar
@@ -278,6 +279,8 @@ export default function Navbar() {
                   </Link>
                 </div>
               )}
+
+              <BackendStatus /> 
 
 
 
