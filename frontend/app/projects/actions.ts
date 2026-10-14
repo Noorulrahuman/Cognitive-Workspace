@@ -95,7 +95,6 @@ export async function listProjects(): Promise<ActionResult<ProjectRow[]>> {
     .from("projects")
     .select("*")
     .order("created_at", { ascending: false });
-
   if (error) return { success: false, error: "Could not load your projects." };
   return { success: true, data: (data ?? []) as ProjectRow[] };
 }

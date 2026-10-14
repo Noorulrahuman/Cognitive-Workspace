@@ -103,3 +103,30 @@ Next.js (App Router), React, TypeScript, Tailwind CSS, Supabase Auth.
 
 - **Server Actions** for projects (create, list, update, delete) with login check and input validation.
 
+
+### Project Server Actions (`frontend/app/projects/actions.ts`)
+
+- Added `listProjects`, `createProject`, `updateProject`, `deleteProject` (run on the server).
+- They use the signed-in user's Supabase session, so RLS applies. Not signed in: "Please sign in to continue."
+- Input is validated first (name 3-100 characters, description up to 500, category required, up to 10 tags, link must be http/https).
+- Every action returns `{ success: true, data }` or `{ success: false, error }`.
+- Used in `frontend/app/projects/page.tsx` for list, create, edit and delete.
+
+### UI feedback for project operations (`frontend/app/projects/page.tsx`)
+
+- Loading text: "Loading your projects..."
+- Empty state: "No projects found" with a "Create Project" button.
+- Green toast on success, red toast on validation or database errors.
+- Amber "Database problem" banner with a Retry button.
+- Create, Edit and Delete buttons are disabled while working ("Saving...", "Removing...").
+
+### Tasks page, settings and backend status
+
+- Tasks page (`frontend/app/projects/[id]/tasks/page.tsx`): due-date chips on cards, and Delete asks for confirmation.
+- Settings (`frontend/app/settings/page.tsx`): saved view and sort preferences are applied on the Projects page.
+- Backend status dot in the Navbar (`frontend/components/BackendStatus.tsx`): green when the backend is online, red when offline.
+
+### Note
+
+- RLS policies (`auth.uid() = user_id`) are the database owner's task.
+

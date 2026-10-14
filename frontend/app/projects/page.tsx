@@ -5,8 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import { createProject, updateProject, deleteProject } from "./actions";
-import {
+import { listProjects, createProject, updateProject, deleteProject } from "./actions";import {
   Task,
   TaskStage,
   TaskPriority,
@@ -254,6 +253,7 @@ export default function ProjectsPage() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [projectDetail, setProjectDetail] = useState<Project | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
   
     // NEW: the project being edited (null = edit popup closed)
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
@@ -264,6 +264,7 @@ export default function ProjectsPage() {
     description: ""
   });
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
+  const [deleting, setDeleting] = useState<boolean>(false);
 
   // Inline Add Task state inside project detail
   const [isInlineAddTaskOpen, setIsInlineAddTaskOpen] = useState<boolean>(false);
@@ -286,8 +287,9 @@ export default function ProjectsPage() {
   });
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, type: "success" | "error" = "success") => {
     setToastMessage(msg);
+    setToastType(type);
     setTimeout(() => setToastMessage(null), 4000);
   };
 
@@ -312,11 +314,10 @@ export default function ProjectsPage() {
 
     // 1. Attempt Supabase direct query for projects
     try {
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false });
-
+      // CHANGED: load through the secure Server Action
+      const listResult = await listProjects();
+      const data = listResult.success ? listResult.data : null;
+      const error = listResult.success ? null : { code: "", message: listResult.error };
       if (!error && Array.isArray(data)) {
         setSupabaseConnected(true);
         setSupabaseNotice(null);
@@ -341,7 +342,7 @@ export default function ProjectsPage() {
           setLoading(false);
           return;
         } else {
-          setProjects(DEFAULT_PROJECTS);
+          setProjects([]);
           setLoading(false);
           return;
         }
@@ -465,27 +466,30 @@ export default function ProjectsPage() {
     let createdProject: Project | null = null;
     let savedToSupabase = false;
 
-    try {
-      const { data, error } = await supabase
-        .from("projects")
-        .insert([projectPayload])
-        .select()
-        .single();
+    // CHANGED: create through the secure Server Action
+    const result = await createProject({
+      name: projectPayload.name,
+      description: projectPayload.description,
+      category: projectPayload.category,
+      tags: projectPayload.tags,
+      source_url: projectPayload.source_url,
+    });
 
-      if (!error && data) {
-        createdProject = {
-          ...data,
-          name: (data as any).title || (data as any).name || projectPayload.name,
-          title: (data as any).title || (data as any).name || projectPayload.name,
-          status: "Active",
-          tags: Array.isArray((data as any).tags) ? (data as any).tags : projectPayload.tags
-        } as Project;
-        savedToSupabase = true;
-        setSupabaseConnected(true);
-        setSupabaseNotice(null);
-      }
-    } catch {
-      // Ignored
+    if (result.success) {
+      createdProject = {
+        ...result.data,
+        name: projectPayload.name,
+        status: "Active",
+        tags: Array.isArray(result.data.tags) ? result.data.tags : projectPayload.tags,
+      } as Project;
+      savedToSupabase = true;
+      setSupabaseConnected(true);
+      setSupabaseNotice(null);
+    } else if (!isDatabaseProblem(result.error)) {
+      // Sign-in or validation problem: tell the user and stop
+      showToast(result.error, "error");
+      setSubmitting(false);
+      return;
     }
 
     if (!createdProject) {
@@ -532,23 +536,25 @@ export default function ProjectsPage() {
     if (savedToSupabase) {
       showToast(`Project "${createdProject.name}" created and synced to Supabase.`);
     } else {
-      showToast(`Project "${createdProject.name}" created locally.`);
+      showToast(`Could not reach the database. "${createdProject.name}" was saved in this browser only.`, "error");
     }
   };
 
   // Handle Delete Project
-  const handleDeleteConfirm = async () => {
-    if (!projectToDelete) return;
+    const handleDeleteConfirm = async () => {
+    if (!projectToDelete || deleting) return;
+    setDeleting(true);
     const targetId = projectToDelete.id;
     const targetName = projectToDelete.name;
-  // CHANGED: delete through the secure Server Action
+
+    // delete through the secure Server Action
     const result = await deleteProject(targetId);
     if (!result.success && !isDatabaseProblem(result.error)) {
-      showToast(result.error);
+      showToast(result.error, "error");
       setProjectToDelete(null);
+      setDeleting(false);
       return;
     }
-
 
     try {
       await fetch(`${API_URL}/api/v1/projects/${targetId}`, { method: "DELETE" });
@@ -559,8 +565,14 @@ export default function ProjectsPage() {
     const updated = projects.filter((p) => p.id !== targetId);
     saveLocalProjects(updated);
     setProjectToDelete(null);
-    showToast(`Project "${targetName}" removed.`);
+    setDeleting(false);
+    if (result.success) {
+      showToast(`Project "${targetName}" removed.`);
+    } else {
+      showToast(`Could not reach the database. "${targetName}" was removed from this browser only.`, "error");
+    }
   };
+  
 
     // NEW: open the edit popup with the current values filled in
   const openEditModal = (project: Project) => {
@@ -604,7 +616,7 @@ export default function ProjectsPage() {
       savedToSupabase = true;
     } else if (!isDatabaseProblem(result.error)) {
       // Sign-in or validation problem: tell the user and stop
-      showToast(result.error);
+      showToast(result.error, "error");
       setSavingEdit(false);
       return;
     }
@@ -620,7 +632,8 @@ export default function ProjectsPage() {
     showToast(
       savedToSupabase
         ? `Project "${editedName}" updated.`
-        : `Project "${editedName}" updated (saved in this browser only).`
+        : `Could not reach the database. "${editedName}" was changed in this browser only.`,
+      savedToSupabase ? "success" : "error"
     );
   };
 
@@ -739,9 +752,8 @@ export default function ProjectsPage() {
     <div className="min-h-full py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
       {/* Toast Notification */}
       {toastMessage && (
-        
-        <div className="fixed bottom-6 right-6 z-[60] flex items-center gap-3 bg-zinc-900 border border-emerald-500/40 text-emerald-300 px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md">
-          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+      <div className={`fixed bottom-6 right-6 z-[60] flex items-center gap-3 bg-zinc-900 border px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md ${toastType === "error" ? "border-rose-500/40 text-rose-300" : "border-emerald-500/40 text-emerald-300"}`}>
+         <span className={`h-2 w-2 rounded-full animate-ping ${toastType === "error" ? "bg-rose-400" : "bg-emerald-400"}`} />
           <p className="text-sm font-medium">{toastMessage}</p>
         </div>
       )}
@@ -754,7 +766,7 @@ export default function ProjectsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div className="text-xs">
-              <span className="font-semibold text-amber-100">Database Schema: </span>
+              <span className="font-semibold text-amber-100">Database problem:  </span>
               {supabaseNotice}
             </div>
           </div>
@@ -923,7 +935,7 @@ export default function ProjectsPage() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
             <div className="h-8 w-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
-            <p className="mt-3 text-xs font-mono">Synchronizing workspace projects...</p>
+            <p className="mt-3 text-xs font-mono">Loading your projects...</p>
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-800 p-12 text-center">
@@ -1744,9 +1756,10 @@ export default function ProjectsPage() {
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white shadow-md cursor-pointer"
+                disabled={deleting}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Yes, Remove Project
+                {deleting ? "Removing..." : "Yes, Remove Project"}
               </button>
             </div>
           </div>
