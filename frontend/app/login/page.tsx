@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import CognitiveLogo from "@/components/CognitiveLogo";
 
 function calculatePasswordStrength(pass: string): {
   score: number;
@@ -209,12 +210,18 @@ function LoginContent() {
       <div className="w-full max-w-md relative z-10">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-3 group">
-                        {/* Gold dot, same style as the navbar (was green) */}
-            <div className="h-3.5 w-3.5 rounded-full bg-amber-400 group-hover:scale-125 transition-transform shadow-[0_0_10px_rgba(251,191,36,0.7)]" />
-            {/* Gold gradient text with a slow shine (animation is defined in globals.css) */}
-            <span className="font-mono text-sm font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)]">
-              Cognitive Workspace
+          <Link href="/" className="inline-flex flex-col items-center gap-2 mb-4 group">
+            <CognitiveLogo size="md" variant="icon" animated={true} />
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className="font-mono text-sm font-extrabold tracking-wider uppercase bg-gradient-to-r from-cyan-400 via-sky-200 to-fuchsia-400 bg-clip-text text-transparent group-hover:drop-shadow-[0_0_12px_rgba(6,182,212,0.65)] transition-all duration-300">
+                Cognitive Workspace
+              </span>
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300">
+                CW
+              </span>
+            </div>
+            <span className="text-[9px] font-mono tracking-[0.2em] text-zinc-400 uppercase">
+              THINK &bull; PLAN &bull; CREATE
             </span>
           </Link>
           <h1 className="text-2xl font-bold tracking-tight text-white">

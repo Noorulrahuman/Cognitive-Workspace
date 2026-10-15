@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { useAccent } from "@/components/AccentColorProvider";
+import CognitiveLogo from "@/components/CognitiveLogo";
 import BackendStatus from "@/components/BackendStatus";
 
 /* ==========================================================================
@@ -96,13 +98,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut, isLoading: authLoading } = useAuth();
+  const { accentColor } = useAccent();
   const backendStatus = useBackendStatus();
   const statusStyle = STATUS_STYLES[backendStatus];
 
   // Bundled menu state
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"menu" | "settings">("menu");
-  const [accentTheme, setAccentTheme] = useState<string>("indigo");
   const [soundAlerts, setSoundAlerts] = useState<boolean>(true);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -148,15 +150,25 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         {/* ===== LEFT: Brand + Main Links ===== */}
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="h-3 w-3 rounded-full bg-amber-400 group-hover:scale-125 transition-transform duration-300 shadow-[0_0_10px_rgba(251,191,36,0.7)]" />
-            <span className="font-mono text-sm font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] group-hover:drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] transition-all duration-300">
-              Cognitive Workspace
-            </span>
+          <Link href="/" className="flex items-center gap-3 group">
+            <CognitiveLogo size="sm" variant="icon" animated={true} />
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono text-xs sm:text-sm font-extrabold tracking-wider uppercase bg-gradient-to-r from-cyan-400 via-sky-200 to-fuchsia-400 bg-clip-text text-transparent group-hover:drop-shadow-[0_0_12px_rgba(6,182,212,0.65)] transition-all duration-300">
+                  Cognitive Workspace
+                </span>
+                <span className="hidden sm:inline-block text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300">
+                  CW
+                </span>
+              </div>
+              <span className="hidden sm:inline-block text-[8px] font-mono tracking-[0.2em] text-zinc-400 uppercase -mt-0.5">
+                THINK &bull; PLAN &bull; CREATE
+              </span>
+            </div>
           </Link>
 
           {/* Desktop Links */}
-          <nav aria-label="Main" className="hidden md:flex items-center gap-1">
+          <nav aria-label="Main" className="hidden md:flex items-center gap-1.5">
             {NAV_ITEMS.map((item) => {
               const active = isActivePath(pathname, item.href);
               return (
@@ -164,10 +176,19 @@ export default function Navbar() {
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                  style={
                     active
-                      ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                      : "text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                      ? {
+                          backgroundColor: "var(--accent-subtle)",
+                          borderColor: "var(--accent-border)",
+                          color: "#ffffff",
+                        }
+                      : undefined
+                  }
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all border ${
+                    active
+                      ? "shadow-xs font-semibold"
+                      : "border-transparent text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
                   }`}
                 >
                   {item.name}
@@ -183,9 +204,17 @@ export default function Navbar() {
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             aria-expanded={isMenuOpen}
             aria-label="Open Workspace Menu & Settings"
+            style={
+              isMenuOpen
+                ? {
+                    borderColor: "var(--accent-color)",
+                    boxShadow: "0 0 16px var(--accent-subtle)",
+                  }
+                : undefined
+            }
             className={`group flex items-center gap-2.5 pl-3 pr-2 py-1.5 rounded-full border transition-all cursor-pointer ${
               isMenuOpen
-                ? "border-indigo-500/60 bg-zinc-800/90 text-white ring-2 ring-indigo-500/20"
+                ? "bg-zinc-800/90 text-white"
                 : "border-zinc-800 bg-zinc-900/90 hover:border-zinc-700 hover:bg-zinc-850 text-zinc-300"
             }`}
           >
@@ -313,7 +342,11 @@ export default function Navbar() {
                     <Link
                       href="/login?tab=register"
                       onClick={() => setIsMenuOpen(false)}
-                      className="flex items-center justify-center py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md shadow-indigo-600/25 transition text-center"
+                      style={{
+                        backgroundColor: "var(--accent-color)",
+                        boxShadow: "0 4px 14px var(--accent-glow)",
+                      }}
+                      className="flex items-center justify-center py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 text-center"
                     >
                       Register
                     </Link>
@@ -337,9 +370,10 @@ export default function Navbar() {
               key={item.href}
               href={item.href}
               aria-current={active ? "page" : undefined}
+              style={active ? { color: "var(--accent-color)" } : undefined}
               className={`px-2 py-1 text-xs font-medium rounded transition ${
                 active
-                  ? "text-indigo-400 font-semibold"
+                  ? "font-semibold"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >

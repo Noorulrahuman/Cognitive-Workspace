@@ -9,6 +9,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 // ==============================================================================
 
 export type MemberRoleType = "manager" | "developer";
+export type SystemRole = "Admin" | "Member" | "Editor" | "Viewer";
+
+export interface ActivityLogItem {
+  id: string;
+  action: string;
+  timestamp: string;
+  details?: string;
+}
 
 export interface Member {
   id: string;
@@ -16,12 +24,16 @@ export interface Member {
   email: string;
   role_type: MemberRoleType; // Separates managers and developers
   role_title: string;        // e.g. "Engineering Manager", "Lead AI Engineer"
+  system_role?: SystemRole;  // System access tier (Admin, Member, Editor, Viewer)
   department: string;        // e.g. "Cognitive Architecture", "Core Platform"
   avatar_color: string;      // Tailwind gradient
   status: "online" | "away" | "offline";
   skills: string[];
   assigned_projects: string[];
   created_at: string;
+  joined_date?: string;
+  bio?: string;
+  activity_log?: ActivityLogItem[];
 }
 
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
@@ -55,39 +67,61 @@ export const DEFAULT_MEMBERS: Member[] = [
     name: "Dr. Sarah Chen",
     email: "sarah.chen@cognitive.ai",
     role_type: "manager",
+    system_role: "Admin",
     role_title: "Head of Cognitive Architecture",
     department: "Executive & AI Strategy",
     avatar_color: "from-amber-500 to-rose-600",
     status: "online",
     skills: ["LangGraph Orchestration", "Multi-Agent Topology", "System Design"],
     assigned_projects: ["Financial Document Intelligence", "Regulatory Web Scraper"],
-    created_at: "2026-09-15T08:00:00Z"
+    created_at: "2026-09-15T08:00:00Z",
+    joined_date: "2026-09-15T08:00:00Z",
+    bio: "Pioneering state machine graph topologies for autonomous multi-agent cognition. Leads enterprise reasoning workflows and governance.",
+    activity_log: [
+      { id: "act-1", action: "Approved architectural RFC for pgvector clustering", timestamp: "2026-10-14T10:15:00Z" },
+      { id: "act-2", action: "Assigned Financial Document Intelligence pipeline tasks", timestamp: "2026-10-12T14:30:00Z" },
+      { id: "act-3", action: "Promoted to Workspace Admin", timestamp: "2026-09-15T08:00:00Z" }
+    ]
   },
   {
     id: "m-002",
     name: "Marcus Vance",
     email: "marcus.vance@cognitive.ai",
     role_type: "manager",
+    system_role: "Admin",
     role_title: "Product & Delivery Lead",
     department: "Product Management",
     avatar_color: "from-indigo-600 to-purple-600",
     status: "online",
     skills: ["Roadmap Planning", "Vector Search KPIs", "Agile Execution"],
     assigned_projects: ["Biomedical Literature Search", "Financial Document Intelligence"],
-    created_at: "2026-09-18T09:30:00Z"
+    created_at: "2026-09-18T09:30:00Z",
+    joined_date: "2026-09-18T09:30:00Z",
+    bio: "Directs product strategy across agentic copilot features and cross-department team velocity metrics.",
+    activity_log: [
+      { id: "act-4", action: "Finalized sprint goals for Q4 LLM benchmark suite", timestamp: "2026-10-13T16:00:00Z" },
+      { id: "act-5", action: "Configured team milestone review cadence", timestamp: "2026-10-09T11:20:00Z" }
+    ]
   },
   {
     id: "m-003",
     name: "Elena Rostova",
     email: "elena.rostova@cognitive.ai",
     role_type: "manager",
+    system_role: "Editor",
     role_title: "Engineering Manager (Data Pipelines)",
     department: "Platform Engineering",
     avatar_color: "from-pink-500 to-red-600",
     status: "away",
     skills: ["ETL Pipelines", "Compliance Guardrails", "Security Audits"],
     assigned_projects: ["Regulatory Web Scraper"],
-    created_at: "2026-09-20T11:00:00Z"
+    created_at: "2026-09-20T11:00:00Z",
+    joined_date: "2026-09-20T11:00:00Z",
+    bio: "Oversees large-scale document scraping pipelines and data compliance guardrails for regulatory compliance.",
+    activity_log: [
+      { id: "act-6", action: "Executed data compliance audit on ingestion queue", timestamp: "2026-10-14T09:45:00Z" },
+      { id: "act-7", action: "Reviewed Regulatory Web Scraper test coverage", timestamp: "2026-10-11T13:10:00Z" }
+    ]
   },
 
   // --- DEVELOPERS ---
@@ -96,52 +130,79 @@ export const DEFAULT_MEMBERS: Member[] = [
     name: "Alex Rivera",
     email: "alex.rivera@cognitive.ai",
     role_type: "developer",
+    system_role: "Editor",
     role_title: "Senior LangGraph & Python Engineer",
     department: "AI Agent Development",
     avatar_color: "from-blue-600 to-cyan-500",
     status: "online",
     skills: ["Python", "LangGraph", "FastAPI", "Prompt Engineering"],
     assigned_projects: ["Financial Document Intelligence", "Regulatory Web Scraper"],
-    created_at: "2026-09-25T10:00:00Z"
+    created_at: "2026-09-25T10:00:00Z",
+    joined_date: "2026-09-25T10:00:00Z",
+    bio: "Core contributor building cyclical multi-agent graphs with state checkpointing and dynamic tool routing.",
+    activity_log: [
+      { id: "act-8", action: "Merged LangGraph cyclic recursion optimization", timestamp: "2026-10-15T08:30:00Z" },
+      { id: "act-9", action: "Updated FastAPI streaming response handler", timestamp: "2026-10-13T17:15:00Z" }
+    ]
   },
   {
     id: "d-002",
     name: "Priya Sharma",
     email: "priya.sharma@cognitive.ai",
     role_type: "developer",
+    system_role: "Member",
     role_title: "Fullstack Next.js & UI Engineer",
     department: "Frontend Experience",
     avatar_color: "from-emerald-500 to-teal-600",
     status: "online",
     skills: ["TypeScript", "Next.js 16", "Tailwind CSS", "React Query"],
     assigned_projects: ["Biomedical Literature Search", "Regulatory Web Scraper"],
-    created_at: "2026-09-27T13:45:00Z"
+    created_at: "2026-09-27T13:45:00Z",
+    joined_date: "2026-09-27T13:45:00Z",
+    bio: "Crafts high-performance interactive client interfaces, master-detail side panels, and responsive UI systems.",
+    activity_log: [
+      { id: "act-10", action: "Refactored Members view into streamlined master-detail drawer", timestamp: "2026-10-15T11:00:00Z" },
+      { id: "act-11", action: "Bound global accent theme variables to layout", timestamp: "2026-10-15T09:30:00Z" }
+    ]
   },
   {
     id: "d-003",
     name: "David Kim",
     email: "david.kim@cognitive.ai",
     role_type: "developer",
+    system_role: "Member",
     role_title: "Document Ingestion & PyMuPDF Specialist",
     department: "Document Intelligence",
     avatar_color: "from-violet-600 to-indigo-600",
     status: "online",
     skills: ["PyMuPDF", "Playwright", "OCR Extraction", "Pandas"],
     assigned_projects: ["Financial Document Intelligence"],
-    created_at: "2026-10-01T08:15:00Z"
+    created_at: "2026-10-01T08:15:00Z",
+    joined_date: "2026-10-01T08:15:00Z",
+    bio: "Specialist in unstructured PDF table parsing, bounding box extraction, and multi-column document chunking.",
+    activity_log: [
+      { id: "act-12", action: "Enhanced OCR table boundary segmentation accuracy", timestamp: "2026-10-14T14:20:00Z" },
+      { id: "act-13", action: "Indexed 1,200 financial filing PDFs", timestamp: "2026-10-10T15:40:00Z" }
+    ]
   },
   {
     id: "d-004",
     name: "Sophia Taylor",
     email: "sophia.taylor@cognitive.ai",
     role_type: "developer",
+    system_role: "Viewer",
     role_title: "Vector DB & Supabase Systems Dev",
     department: "Storage & Semantic Retrieval",
     avatar_color: "from-sky-500 to-indigo-500",
     status: "offline",
     skills: ["Supabase", "pgvector", "PostgreSQL", "Embeddings"],
     assigned_projects: ["Biomedical Literature Search"],
-    created_at: "2026-10-02T14:20:00Z"
+    created_at: "2026-10-02T14:20:00Z",
+    joined_date: "2026-10-02T14:20:00Z",
+    bio: "Focuses on HNSW index tuning, cosine distance thresholds, and hybrid sparse-dense vector retrieval.",
+    activity_log: [
+      { id: "act-14", action: "Benchmarked HNSW m=16 ef_construction=64 performance", timestamp: "2026-10-12T16:00:00Z" }
+    ]
   }
 ];
 
@@ -508,6 +569,199 @@ export async function addWorkspaceMember(
   const updated = [memberWithId, ...existing];
   saveMembersLocal(updated);
   return memberWithId;
+}
+
+// ------------------------------------------------------------------------------
+// ROLE ASSIGNMENT & REAL-TIME SYNCHRONIZATION HELPERS (Task 4)
+// ------------------------------------------------------------------------------
+
+/**
+ * Mock network dispatch to update a member's role privilege.
+ * Triggers simulated latency, logs JSON payload, and updates local state & storage.
+ */
+export async function updateUserRole(
+  userId: string,
+  newRole: SystemRole
+): Promise<{ success: boolean; updatedMember: Member | null; payload: { userId: string; role: SystemRole; updated_at: string } }> {
+  const timestamp = new Date().toISOString();
+  const payload = {
+    userId,
+    role: newRole,
+    updated_at: timestamp,
+  };
+
+  // Structured stub log for the network dispatch
+  console.info("[MOCK NETWORK DISPATCH] PATCH /api/members/" + userId + "/role", payload);
+
+  // Simulate network latency (300ms)
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const members = await fetchWorkspaceMembers();
+  let updatedMember: Member | null = null;
+
+  const updatedMembers = members.map((m) => {
+    if (m.id === userId) {
+      const newActivity: ActivityLogItem = {
+        id: `act-${Date.now().toString(36)}`,
+        action: `Assigned role privilege: ${newRole}`,
+        timestamp,
+        details: `Privilege updated from ${m.system_role || "Member"} to ${newRole}`,
+      };
+      const updated: Member = {
+        ...m,
+        system_role: newRole,
+        activity_log: [newActivity, ...(m.activity_log || [])],
+      };
+      updatedMember = updated;
+      return updated;
+    }
+    return m;
+  });
+
+  saveMembersLocal(updatedMembers);
+  return { success: true, updatedMember, payload };
+}
+
+/**
+ * Ensures the currently signed-in authenticated user appears in the members list immediately.
+ */
+export function syncCurrentUserToMembers(
+  authUser: { id?: string; email?: string; user_metadata?: { full_name?: string } } | null,
+  currentMembers: Member[]
+): { updatedList: Member[]; newlyAdded: Member | null } {
+  if (!authUser || !authUser.email) {
+    return { updatedList: currentMembers, newlyAdded: null };
+  }
+
+  const existingIndex = currentMembers.findIndex(
+    (m) => m.email.toLowerCase() === authUser.email!.toLowerCase() || m.id === authUser.id
+  );
+
+  if (existingIndex >= 0) {
+    const existing = currentMembers[existingIndex];
+    if (existing.status !== "online") {
+      const updated = [...currentMembers];
+      updated[existingIndex] = { ...existing, status: "online" };
+      saveMembersLocal(updated);
+      return { updatedList: updated, newlyAdded: null };
+    }
+    return { updatedList: currentMembers, newlyAdded: null };
+  }
+
+  // Generate new member for the signed-in session
+  const displayName =
+    authUser.user_metadata?.full_name || authUser.email.split("@")[0] || "Workspace Member";
+  const now = new Date().toISOString();
+
+  const newMember: Member = {
+    id: authUser.id || `m-auth-${Date.now().toString(36)}`,
+    name: displayName,
+    email: authUser.email,
+    role_type: "developer",
+    system_role: "Member",
+    role_title: "Active Workspace Contributor",
+    department: "AI Agent Development",
+    avatar_color: "from-indigo-600 via-purple-600 to-pink-500",
+    status: "online",
+    skills: ["AI Systems", "Next.js", "Collaboration"],
+    assigned_projects: ["Financial Document Intelligence"],
+    created_at: now,
+    joined_date: now,
+    bio: "Signed in via Cognitive Workspace auth session. Synchronized with live workspace members ecosystem.",
+    activity_log: [
+      {
+        id: `act-${Date.now().toString(36)}`,
+        action: "User signed in and initialized in talent roster",
+        timestamp: now,
+        details: "Live authenticated session synchronized into talent directory.",
+      },
+    ],
+  };
+
+  const updatedList = [newMember, ...currentMembers];
+  saveMembersLocal(updatedList);
+  return { updatedList, newlyAdded: newMember };
+}
+
+/**
+ * Generates and inserts a realistic new user sign-in for testing real-time synchronization.
+ */
+export function simulateNewUserSignIn(): Member {
+  const sampleUsers = [
+    {
+      name: "Jordan Blake",
+      email: "jordan.blake@cognitive.ai",
+      role_title: "AI Security & Guardrails Engineer",
+      role_type: "developer" as MemberRoleType,
+      system_role: "Editor" as SystemRole,
+      department: "SecOps & Guardrails",
+      avatar_color: "from-rose-500 to-orange-500",
+      skills: ["Red Teaming", "Llama Guard", "Prompt Defense"],
+      bio: "Focuses on adversarial robustness, jailbreak defense, and automated compliance auditing.",
+    },
+    {
+      name: "Kavita Rao",
+      email: "kavita.rao@cognitive.ai",
+      role_title: "Prompt Evaluation & Alignment Lead",
+      role_type: "manager" as MemberRoleType,
+      system_role: "Admin" as SystemRole,
+      department: "AI Alignment",
+      avatar_color: "from-teal-500 to-emerald-600",
+      skills: ["RLHF", "DSPy Optimizers", "Evaluation Metrics"],
+      bio: "Leads automated prompt synthesis pipelines and empirical evaluation harnesses for multi-agent benchmarks.",
+    },
+    {
+      name: "Liam O'Connor",
+      email: "liam.oconnor@cognitive.ai",
+      role_title: "Distributed Systems & Ingestion Architect",
+      role_type: "developer" as MemberRoleType,
+      system_role: "Member" as SystemRole,
+      department: "Core Platform",
+      avatar_color: "from-violet-600 to-fuchsia-600",
+      skills: ["Kafka", "Celery", "FastAPI", "Redis"],
+      bio: "Architects high-throughput distributed ingestion queues and streaming workers for document intelligence.",
+    },
+    {
+      name: "Mei-Ling Zhou",
+      email: "meiling.zhou@cognitive.ai",
+      role_title: "Vector DB Performance Specialist",
+      role_type: "developer" as MemberRoleType,
+      system_role: "Viewer" as SystemRole,
+      department: "Storage & Semantic Retrieval",
+      avatar_color: "from-cyan-500 to-blue-600",
+      skills: ["pgvector", "HNSW Tuning", "Hybrid Search"],
+      bio: "Optimizes vector embedding indexing and low-latency reciprocal rank fusion search algorithms.",
+    },
+  ];
+
+  const template = sampleUsers[Math.floor(Math.random() * sampleUsers.length)];
+  const uniqueId = `m-sim-${Date.now().toString(36)}-${Math.floor(Math.random() * 900 + 100)}`;
+  const now = new Date().toISOString();
+
+  return {
+    id: uniqueId,
+    name: template.name,
+    email: template.email,
+    role_type: template.role_type,
+    system_role: template.system_role,
+    role_title: template.role_title,
+    department: template.department,
+    avatar_color: template.avatar_color,
+    status: "online",
+    skills: template.skills,
+    assigned_projects: ["Financial Document Intelligence"],
+    created_at: now,
+    joined_date: now,
+    bio: template.bio,
+    activity_log: [
+      {
+        id: `act-${Date.now().toString(36)}`,
+        action: "Signed in via Workspace SSO",
+        timestamp: now,
+        details: "Instant profile provisioning and talent synchronization completed.",
+      },
+    ],
+  };
 }
 
 export function getTasksLocal(): Task[] {

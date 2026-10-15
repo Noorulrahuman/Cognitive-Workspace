@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
+import { useAccent, ACCENT_PRESETS, DEFAULT_ACCENT } from "@/components/AccentColorProvider";
 
 /* ==========================================================================
  * Account Settings page  (route: /settings)
@@ -50,6 +51,32 @@ export default function SettingsPage() {
   const supabase = createClient();
   const router = useRouter();
   const { user, isLoading, signOut, refreshSession } = useAuth();
+  const { accentColor, setAccentColor, presets, activePreset } = useAccent();
+
+  // Accent Color Customizer State
+  const [customHex, setCustomHex] = useState<string>(accentColor);
+  const [accentNotice, setAccentNotice] = useState<Notice>(null);
+
+  useEffect(() => {
+    setCustomHex(accentColor);
+  }, [accentColor]);
+
+  const handleApplyCustomHex = (e: React.FormEvent) => {
+    e.preventDefault();
+    const hex = customHex.trim();
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex)) {
+      setAccentNotice({
+        type: "error",
+        text: "Please enter a valid 3- or 6-digit hex code (e.g. #3b82f6 or #f43f5e).",
+      });
+      return;
+    }
+    setAccentColor(hex);
+    setAccentNotice({
+      type: "success",
+      text: `Accent color updated to ${hex}. Saved to localStorage and active across all views.`,
+    });
+  };
 
   // Profile form
   const [fullName, setFullName] = useState<string>("");
@@ -313,7 +340,11 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={savingName}
-              className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition cursor-pointer"
+              style={{
+                backgroundColor: "var(--accent-color)",
+                boxShadow: "0 4px 14px var(--accent-glow)",
+              }}
+              className="ml-auto rounded-lg px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 transition cursor-pointer"
             >
               {savingName ? "Saving..." : "Save name"}
             </button>
@@ -361,12 +392,225 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={savingPassword}
-              className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition cursor-pointer"
+              style={{
+                backgroundColor: "var(--accent-color)",
+                boxShadow: "0 4px 14px var(--accent-glow)",
+              }}
+              className="ml-auto rounded-lg px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 transition cursor-pointer"
             >
               {savingPassword ? "Saving..." : "Change password"}
             </button>
           </div>
         </form>
+
+        {/* ============================================================ */}
+        {/* GLOBAL ACCENT COLOR CUSTOMISATION (TASK 2) */}
+        {/* ============================================================ */}
+        <div className={`${cardClass} space-y-5 border-zinc-800 relative overflow-hidden`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-zinc-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-3.5 w-3.5 rounded-full transition-colors"
+                  style={{ backgroundColor: "var(--accent-color)", boxShadow: "0 0 10px var(--accent-glow)" }}
+                />
+                <h2 className="text-sm font-bold text-white tracking-wide">
+                  Global Accent Color Customisation
+                </h2>
+              </div>
+              <p className="mt-1 text-xs text-zinc-400">
+                Personalize the workspace theme across every module. All buttons, active indicators, borders, glow rings, and loading states update instantaneously without reloading.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAccentColor(DEFAULT_ACCENT);
+                setCustomHex(DEFAULT_ACCENT);
+                setAccentNotice({
+                  type: "success",
+                  text: "Reset to default workspace Indigo (#6366f1).",
+                });
+              }}
+              className="text-[11px] font-mono text-zinc-400 hover:text-white px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950/60 hover:bg-zinc-800 transition shrink-0"
+            >
+              Reset to Indigo
+            </button>
+          </div>
+
+          {/* Curated Presets */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-300 mb-2">
+              Curated Presets
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              {presets.map((preset) => {
+                const isSelected = accentColor.toLowerCase() === preset.hex.toLowerCase();
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setAccentColor(preset.hex);
+                      setCustomHex(preset.hex);
+                      setAccentNotice({
+                        type: "success",
+                        text: `Switched accent to ${preset.name} (${preset.hex}). Persisted to localStorage.`,
+                      });
+                    }}
+                    style={
+                      isSelected
+                        ? {
+                            borderColor: preset.hex,
+                            backgroundColor: "rgba(255,255,255,0.04)",
+                            boxShadow: `0 0 14px ${preset.hex}40`,
+                          }
+                        : undefined
+                    }
+                    className={`group relative flex flex-col items-start p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      isSelected
+                        ? "ring-2 ring-offset-2 ring-offset-zinc-950 ring-[var(--accent-color)]"
+                        : "border-zinc-800/90 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full mb-2">
+                      <span
+                        className="h-5 w-5 rounded-full transition-transform group-hover:scale-110 shadow-xs"
+                        style={{ backgroundColor: preset.hex }}
+                      />
+                      {isSelected && (
+                        <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-zinc-100 group-hover:text-white truncate w-full">
+                      {preset.name}
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase mt-0.5">
+                      {preset.hex}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Custom HEX Color Input */}
+          <form onSubmit={handleApplyCustomHex} className="pt-3 border-t border-zinc-800/80">
+            <label htmlFor="custom-hex-input" className="block text-xs font-semibold text-zinc-300 mb-1.5">
+              Custom HEX Color
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex items-center flex-1">
+                {/* HTML5 Native Color Picker Picker Swatch */}
+                <div className="absolute left-2.5 flex items-center justify-center">
+                  <input
+                    type="color"
+                    id="html5-color-picker"
+                    aria-label="Pick color from palette"
+                    value={/^#([0-9a-fA-F]{6})$/.test(customHex) ? customHex : "#6366f1"}
+                    onChange={(e) => {
+                      setCustomHex(e.target.value);
+                      setAccentColor(e.target.value);
+                    }}
+                    className="h-6 w-6 rounded-md cursor-pointer border-0 bg-transparent p-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-0 [&::-webkit-color-swatch]:rounded-md"
+                  />
+                </div>
+                <input
+                  id="custom-hex-input"
+                  type="text"
+                  placeholder="#10b981"
+                  value={customHex}
+                  onChange={(e) => setCustomHex(e.target.value)}
+                  maxLength={7}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 pl-11 pr-4 py-2 text-xs font-mono text-white placeholder-zinc-500 focus:border-[var(--accent-color)] focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                style={{
+                  backgroundColor: "var(--accent-color)",
+                  boxShadow: "0 4px 14px var(--accent-glow)",
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 cursor-pointer shrink-0"
+              >
+                Apply Custom Color
+              </button>
+            </div>
+            <p className="mt-1.5 text-[10px] text-zinc-500">
+              Click the square swatch to launch your OS color wheel, or type any 6-digit hex code.
+            </p>
+          </form>
+
+          {/* Dynamic Live UI Preview Box */}
+          <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/70 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                Live Theme Adaptation Preview
+              </span>
+              <span
+                className="text-[10px] font-mono px-2 py-0.5 rounded-full border"
+                style={{
+                  backgroundColor: "var(--accent-subtle)",
+                  borderColor: "var(--accent-border)",
+                  color: "var(--accent-text)",
+                }}
+              >
+                Active: {activePreset ? activePreset.name : customHex}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Primary button preview */}
+              <button
+                type="button"
+                style={{
+                  backgroundColor: "var(--accent-color)",
+                  boxShadow: "0 4px 14px var(--accent-glow)",
+                }}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition"
+              >
+                Primary Button
+              </button>
+
+              {/* Subtle badge preview */}
+              <span
+                className="px-2.5 py-1 rounded-lg text-xs font-medium border"
+                style={{
+                  backgroundColor: "var(--accent-subtle)",
+                  borderColor: "var(--accent-border)",
+                  color: "var(--accent-text)",
+                }}
+              >
+                Subtle Badge
+              </span>
+
+              {/* Status indicator preview */}
+              <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                <span
+                  className="h-2 w-2 rounded-full animate-ping"
+                  style={{ backgroundColor: "var(--accent-color)" }}
+                />
+                <span className="text-[11px] font-mono">Live Pulse</span>
+              </div>
+
+              {/* Mini loading spinner */}
+              <div
+                className="h-4 w-4 rounded-full border-2 border-transparent animate-spin ml-auto"
+                style={{
+                  borderTopColor: "var(--accent-color)",
+                  borderRightColor: "var(--accent-color)",
+                }}
+              />
+            </div>
+          </div>
+
+          <NoticeText notice={accentNotice} />
+        </div>
+
         {/* Preferences */}
         <div className={`${cardClass} space-y-4`}>
           <div>

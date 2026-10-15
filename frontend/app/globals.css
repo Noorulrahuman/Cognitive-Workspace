@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #181818;
+  --background: #09090b;
   --foreground: #ededed;
+  --accent-color: #6366f1;
+  --accent-hover: #4f46e5;
+  --accent-subtle: rgba(99, 102, 241, 0.15);
+  --accent-border: rgba(99, 102, 241, 0.35);
+  --accent-glow: rgba(99, 102, 241, 0.35);
+  --accent-ring: rgba(99, 102, 241, 0.5);
+  --accent-text: #a5b4fc;
   color-scheme: dark;
 }
 
@@ -10,6 +17,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-accent: var(--accent-color);
+  --color-accent-hover: var(--accent-hover);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -27,9 +36,9 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Visible focus ring when navigating with the keyboard (Tab key) */
+/* Visible focus ring using the dynamic accent color */
 :focus-visible {
-  outline: 2px solid #818cf8;
+  outline: 2px solid var(--accent-color);
   outline-offset: 2px;
 }
 
@@ -64,3 +73,149 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .animate-gold-shimmer { animation: none; }
 }
+
+/* ---------- Accent Utilities & Dynamic Classes ---------- */
+.bg-accent {
+  background-color: var(--accent-color);
+}
+
+.bg-accent-hover:hover {
+  background-color: var(--accent-hover);
+}
+
+.bg-accent-subtle {
+  background-color: var(--accent-subtle);
+}
+
+.text-accent {
+  color: var(--accent-color);
+}
+
+.border-accent {
+  border-color: var(--accent-border);
+}
+
+.border-accent-solid {
+  border-color: var(--accent-color);
+}
+
+.shadow-accent {
+  box-shadow: 0 10px 25px -5px var(--accent-glow);
+}
+
+.shadow-accent-glow {
+  box-shadow: 0 0 35px 2px var(--accent-glow);
+}
+
+.ring-accent {
+  --tw-ring-color: var(--accent-ring);
+}
+
+/* ---------- Keyframes for Animated Logo & Interactive Drawers ---------- */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes spin-reverse {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(0.98);
+    filter: drop-shadow(0 0 16px var(--accent-glow));
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 32px var(--accent-glow));
+  }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-7px); }
+}
+
+@keyframes orbit-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50%      { transform: scale(1.05); opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+.animate-spin-slow    { animation: spin-slow 24s linear infinite; }
+.animate-spin-reverse { animation: spin-reverse 18s linear infinite; }
+.animate-pulse-glow   { animation: pulse-glow 4s ease-in-out infinite; }
+.animate-float-gentle { animation: float-gentle 5s ease-in-out infinite; }
+.animate-orbit-pulse  { animation: orbit-pulse 3s ease-in-out infinite; }
+.animate-slide-in-right { animation: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+/* ---------- Cybernetic Owl Logo & CW Circuit Animations ---------- */
+@keyframes circuit-flow {
+  0% { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes neon-border-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes cw-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(6, 182, 212, 0.7)) drop-shadow(0 0 24px rgba(168, 85, 247, 0.5));
+    opacity: 0.92;
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(6, 182, 212, 0.95)) drop-shadow(0 0 40px rgba(236, 72, 153, 0.75));
+    opacity: 1;
+  }
+}
+
+@keyframes eye-scan {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+    filter: drop-shadow(0 0 10px #38bdf8);
+  }
+}
+
+@keyframes neon-aurora {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.animate-circuit-flow {
+  animation: circuit-flow 3s linear infinite;
+}
+
+.animate-neon-border {
+  background-size: 300% 300%;
+  animation: neon-border-rotate 6s ease infinite;
+}
+
+.animate-cw-pulse {
+  animation: cw-pulse 3.5s ease-in-out infinite;
+}
+
+.animate-eye-scan {
+  animation: eye-scan 2.8s ease-in-out infinite;
+}
+
+.animate-neon-aurora {
+  animation: neon-aurora 14s linear infinite;
+}
+
