@@ -1,48 +1,110 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
+import { useAccent } from "@/components/AccentColorProvider";
 import {
   Member,
   MemberRoleType,
+  SystemRole,
   fetchWorkspaceMembers,
   addWorkspaceMember,
+  updateUserRole,
+  syncCurrentUserToMembers,
+  simulateNewUserSignIn,
   fetchWorkspaceTasks,
   Task,
   STAGE_CONFIG,
   PRIORITY_CONFIG,
 } from "@/utils/workspaceData";
 
-function formatDate(iso: string): string {
-  if (!iso) return "No due date";
+function formatDate(iso?: string | null): string {
+  if (!iso) return "N/A";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 60) return "Just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return formatDate(iso);
+}
+
+const ROLE_CONFIG: Record<
+  SystemRole,
+  { label: string; badge: string; icon: string; desc: string }
+> = {
+  Admin: {
+    label: "Admin",
+    badge: "border-amber-500/30 bg-amber-500/10 text-amber-300 font-semibold",
+    icon: "👑",
+    desc: "Full administrative controls and role privilege assignment",
+  },
+  Editor: {
+    label: "Editor",
+    badge: "border-sky-500/30 bg-sky-500/10 text-sky-300 font-semibold",
+    icon: "✏️",
+    desc: "Can edit tasks, prompt graphs, and document schemas",
+  },
+  Member: {
+    label: "Member",
+    badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-semibold",
+    icon: "👥",
+    desc: "Collaborates on project tasks and pipeline executions",
+  },
+  Viewer: {
+    label: "Viewer",
+    badge: "border-zinc-700 bg-zinc-800 text-zinc-300",
+    icon: "👁️",
+    desc: "Read-only access to workspaces and vector evidence",
+  },
+};
+
 export default function MembersPage() {
   const supabase = createClient();
+  const { user: authUser } = useAuth();
+  const { accentColor } = useAccent();
 
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [selectedRoleFilter, setSelectedRoleFilter] = useState<"all" | "manager" | "developer">("all");
+
+  // Filters & Search
+  const [roleFilter, setRoleFilter] = useState<"all" | SystemRole | "manager" | "developer">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Modals
+  // Master-Detail Side Drawer State (Task 1)
+  const [activeMember, setActiveMember] = useState<Member | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [drawerTab, setDrawerTab] = useState<"overview" | "tasks" | "activity">("overview");
+
+  // Role Assignment State (Task 4)
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+  const [roleChangeNotice, setRoleChangeNotice] = useState<string | null>(null);
+
+  // Modals & User Feedback
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [selectedMemberForTasks, setSelectedMemberForTasks] = useState<Member | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // New Member Form Data
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     role_type: "developer" as MemberRoleType,
+    system_role: "Member" as SystemRole,
     role_title: "",
     department: "Engineering",
     skills: "",
+    bio: "",
     avatar_color: "from-blue-600 to-cyan-500",
   });
 
@@ -51,6 +113,7 @@ export default function MembersPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
+  // 1. Initial Load of Members & Tasks
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -65,17 +128,141 @@ export default function MembersPage() {
     loadData();
   }, [supabase]);
 
-  // Esc key closes modals
+  // 2. Real-time Member Synchronization on Sign-in (Task 4)
+  useEffect(() => {
+    if (authUser && members.length > 0) {
+      const { updatedList, newlyAdded } = syncCurrentUserToMembers(authUser, members);
+      if (newlyAdded) {
+        setMembers(updatedList);
+        showToast(`Signed-in user "${newlyAdded.name}" synchronized into members roster.`);
+      }
+    }
+  }, [authUser, members]);
+
+  // Keyboard shortcut: Escape closes drawer and modals
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        setIsDrawerOpen(false);
         setIsAddModalOpen(false);
-        setSelectedMemberForTasks(null);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // Open member details drawer
+  const handleOpenDrawer = (member: Member) => {
+    setActiveMember(member);
+    setIsDrawerOpen(true);
+    setDrawerTab("overview");
+  };
+
+  // Close drawer
+  const handleCloseDrawer = () => {
+    setIsDrawerOpen(false);
+  };
+
+  // 3. Interactive Role Assignment (Task 4)
+  const handleRoleChange = async (newRole: SystemRole) => {
+    if (!activeMember) return;
+    const memberId = activeMember.id;
+    setUpdatingRoleId(memberId);
+    setRoleChangeNotice(`Dispatching role change to ${newRole}...`);
+
+    try {
+      // Mock network dispatch simulating PATCH /api/members/:id/role
+      const result = await updateUserRole(memberId, newRole);
+
+      if (result.success && result.updatedMember) {
+        const updated = result.updatedMember;
+        // Update local members list
+        setMembers((prev) => prev.map((m) => (m.id === memberId ? updated : m)));
+        // Update active drawer state
+        setActiveMember(updated);
+        showToast(`Role for ${updated.name} updated to ${newRole}`);
+        setRoleChangeNotice(`Successfully assigned ${newRole} privilege.`);
+        setTimeout(() => setRoleChangeNotice(null), 3000);
+      }
+    } catch {
+      showToast("Failed to update user role");
+      setRoleChangeNotice("Error updating user role.");
+    } finally {
+      setUpdatingRoleId(null);
+    }
+  };
+
+  // 4. Simulate New User Sign-In (Task 4)
+  const handleSimulateSignIn = () => {
+    const newUser = simulateNewUserSignIn();
+    setMembers((prev) => [newUser, ...prev]);
+    showToast(`Simulated SSO Sign-In: ${newUser.name} added to roster.`);
+    handleOpenDrawer(newUser);
+  };
+
+  // Add Member Submission
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.email.trim()) return;
+
+    setSubmitting(true);
+    try {
+      const skillsArray = formData.skills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const created = await addWorkspaceMember(
+        {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          role_type: formData.role_type,
+          system_role: formData.system_role,
+          role_title:
+            formData.role_title.trim() ||
+            (formData.role_type === "manager"
+              ? "Engineering Manager"
+              : "Software Developer"),
+          department: formData.department.trim() || "Core Platform",
+          avatar_color: formData.avatar_color,
+          status: "online",
+          skills: skillsArray.length > 0 ? skillsArray : ["AI Systems", "TypeScript"],
+          assigned_projects: ["Financial Document Intelligence"],
+          bio: formData.bio.trim() || "Active contributor to Cognitive Workspace pipelines.",
+          joined_date: new Date().toISOString(),
+          activity_log: [
+            {
+              id: `act-${Date.now().toString(36)}`,
+              action: "Member account provisioned",
+              timestamp: new Date().toISOString(),
+              details: "Directly added by administrator.",
+            },
+          ],
+        },
+        supabase
+      );
+
+      setMembers((prev) => [created, ...prev]);
+      setIsAddModalOpen(false);
+      setFormData({
+        name: "",
+        email: "",
+        role_type: "developer",
+        system_role: "Member",
+        role_title: "",
+        department: "Engineering",
+        skills: "",
+        bio: "",
+        avatar_color: "from-blue-600 to-cyan-500",
+      });
+      showToast(`Member "${created.name}" added successfully.`);
+      handleOpenDrawer(created);
+    } catch {
+      showToast("Error saving team member.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Map tasks per member
   const memberTasksMap = useMemo(() => {
@@ -93,11 +280,15 @@ export default function MembersPage() {
     return map;
   }, [tasks]);
 
-  // Filtered members
+  // Filtered members list
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
+      const currentSysRole = m.system_role || "Member";
       const matchesRole =
-        selectedRoleFilter === "all" || m.role_type === selectedRoleFilter;
+        roleFilter === "all" ||
+        currentSysRole === roleFilter ||
+        m.role_type === roleFilter;
+
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -105,91 +296,26 @@ export default function MembersPage() {
         m.role_title.toLowerCase().includes(q) ||
         m.email.toLowerCase().includes(q) ||
         m.department.toLowerCase().includes(q) ||
-        m.skills.some((s) => s.toLowerCase().includes(q));
+        (m.skills && m.skills.some((s) => s.toLowerCase().includes(q))) ||
+        currentSysRole.toLowerCase().includes(q);
+
       return matchesRole && matchesSearch;
     });
-  }, [members, selectedRoleFilter, searchQuery]);
+  }, [members, roleFilter, searchQuery]);
 
-  const managersList = useMemo(
-    () => filteredMembers.filter((m) => m.role_type === "manager"),
-    [filteredMembers]
-  );
-
-  const developersList = useMemo(
-    () => filteredMembers.filter((m) => m.role_type === "developer"),
-    [filteredMembers]
-  );
-
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name.trim() || !formData.email.trim()) return;
-
-    setSubmitting(true);
-    try {
-      const skillsArray = formData.skills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-      const created = await addWorkspaceMember(
-        {
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          role_type: formData.role_type,
-          role_title:
-            formData.role_title.trim() ||
-            (formData.role_type === "manager"
-              ? "Engineering Manager"
-              : "Software Developer"),
-          department: formData.department.trim() || "Core Platform",
-          avatar_color: formData.avatar_color,
-          status: "online",
-          skills: skillsArray.length > 0 ? skillsArray : ["Fullstack", "AI Agents"],
-          assigned_projects: ["Financial Document Intelligence"],
-        },
-        supabase
-      );
-
-      setMembers((prev) => [created, ...prev]);
-      setIsAddModalOpen(false);
-      setFormData({
-        name: "",
-        email: "",
-        role_type: "developer",
-        role_title: "",
-        department: "Engineering",
-        skills: "",
-        avatar_color: "from-blue-600 to-cyan-500",
-      });
-      showToast(`Member "${created.name}" added successfully.`);
-    } catch {
-      showToast("Error saving team member.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const AVATAR_GRADIENTS = [
-    { label: "Blue / Cyan", value: "from-blue-600 to-cyan-500" },
-    { label: "Emerald / Teal", value: "from-emerald-500 to-teal-600" },
-    { label: "Indigo / Violet", value: "from-indigo-600 to-purple-600" },
-    { label: "Amber / Rose", value: "from-amber-500 to-rose-600" },
-    { label: "Pink / Red", value: "from-pink-500 to-red-600" },
-    { label: "Sky / Indigo", value: "from-sky-500 to-indigo-500" },
-  ];
-
-  const currentMemberTasks = useMemo(() => {
-    if (!selectedMemberForTasks) return [];
+  // Tasks for the active member in drawer
+  const activeMemberTasks = useMemo(() => {
+    if (!activeMember) return [];
     return (
-      memberTasksMap[selectedMemberForTasks.id] ||
-      memberTasksMap[selectedMemberForTasks.name] ||
+      memberTasksMap[activeMember.id] ||
+      memberTasksMap[activeMember.name] ||
       []
     );
-  }, [selectedMemberForTasks, memberTasksMap]);
+  }, [activeMember, memberTasksMap]);
 
   return (
-    <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-8">
-      {/* Toast */}
+    <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-8 relative">
+      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-zinc-900/95 px-4 py-3 text-xs font-semibold text-emerald-400 shadow-2xl backdrop-blur-md animate-scale-up">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
@@ -197,32 +323,52 @@ export default function MembersPage() {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-0.5 text-xs font-mono font-medium text-emerald-300 mb-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <div
+            className="inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-xs font-mono font-medium mb-2"
+            style={{
+              backgroundColor: "var(--accent-subtle)",
+              borderColor: "var(--accent-border)",
+              color: "var(--accent-text)",
+            }}
+          >
+            <span
+              className="h-1.5 w-1.5 rounded-full animate-pulse"
+              style={{ backgroundColor: "var(--accent-color)" }}
+            />
             <span>Workspace Talent Directory</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Team Members
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-zinc-400">
-            Click any member name to inspect their read-only assigned task details and progress status.
+          <p className="mt-1 text-xs sm:text-sm text-zinc-400 font-light">
+            Streamlined roster with master-detail side drawer, instant role privilege assignment, and live sync.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            href="/projects"
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition"
-          >
-            <span>&larr; Projects Hub</span>
-          </Link>
-
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Simulate Sign-in Trigger (Task 4) */}
           <button
+            type="button"
+            onClick={handleSimulateSignIn}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-700/80 bg-zinc-900 hover:bg-zinc-800 text-xs font-medium text-zinc-300 transition cursor-pointer hover:border-zinc-600"
+            title="Simulate a real-time authentication event to test instant roster sync"
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            <span>Simulate User Sign-In</span>
+          </button>
+
+          {/* Add Member Button */}
+          <button
+            type="button"
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
+            style={{
+              backgroundColor: "var(--accent-color)",
+              boxShadow: "0 4px 14px var(--accent-glow)",
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 active:scale-95 cursor-pointer"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -232,80 +378,76 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {/* Stats Summary Bar */}
+      {/* Summary Metrics Bar */}
       <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Total Members</p>
           <p className="mt-1 text-2xl font-bold text-white">{members.length}</p>
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-amber-400">Managers & Leads</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-amber-400">Admins & Leaders</p>
           <p className="mt-1 text-2xl font-bold text-amber-300">
-            {members.filter((m) => m.role_type === "manager").length}
+            {members.filter((m) => (m.system_role === "Admin" || m.role_type === "manager")).length}
           </p>
         </div>
         <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-sky-400">Developers & Engineers</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-sky-400">Engineers & Editors</p>
           <p className="mt-1 text-2xl font-bold text-sky-300">
-            {members.filter((m) => m.role_type === "developer").length}
+            {members.filter((m) => m.role_type === "developer" || m.system_role === "Editor").length}
           </p>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-400">Active Tasks</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-400">Assigned Tasks</p>
           <p className="mt-1 text-2xl font-bold text-emerald-300">{tasks.length}</p>
         </div>
       </div>
 
-      {/* Controls: Search & Role Filter Tabs */}
+      {/* Filter Tabs & Search Bar */}
       <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        {/* Role Tabs */}
-        <div className="flex items-center rounded-xl border border-zinc-800 bg-zinc-900/80 p-1 text-xs">
-          <button
-            onClick={() => setSelectedRoleFilter("all")}
-            className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
-              selectedRoleFilter === "all"
-                ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            All Members ({members.length})
-          </button>
-          <button
-            onClick={() => setSelectedRoleFilter("manager")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
-              selectedRoleFilter === "manager"
-                ? "bg-amber-500/20 text-amber-300 font-semibold"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <span>👑 Managers</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-500/10">
-              {members.filter((m) => m.role_type === "manager").length}
-            </span>
-          </button>
-          <button
-            onClick={() => setSelectedRoleFilter("developer")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
-              selectedRoleFilter === "developer"
-                ? "bg-sky-500/20 text-sky-300 font-semibold"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <span>⚡ Developers</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-sky-500/10">
-              {members.filter((m) => m.role_type === "developer").length}
-            </span>
-          </button>
+        {/* Role Filters */}
+        <div className="flex items-center flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-900/80 p-1 text-xs">
+          {(["all", "Admin", "Editor", "Member", "Viewer"] as const).map((r) => {
+            const isSelected = roleFilter === r;
+            const count =
+              r === "all"
+                ? members.length
+                : members.filter((m) => (m.system_role || "Member") === r).length;
+
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRoleFilter(r)}
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: "var(--accent-subtle)",
+                        borderColor: "var(--accent-border)",
+                        color: "#ffffff",
+                      }
+                    : undefined
+                }
+                className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer border ${
+                  isSelected
+                    ? "font-semibold shadow-xs"
+                    : "border-transparent text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                }`}
+              >
+                <span>{r === "all" ? "All Members" : r}</span>
+                <span className="ml-1.5 text-[10px] font-mono opacity-70">({count})</span>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Search */}
+        {/* Search Input */}
         <div className="relative w-full sm:w-72">
           <input
             type="text"
-            placeholder="Search by name, role, skill..."
+            placeholder="Search by name, role, email, skill..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-2 pl-9 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-4 py-2 pl-9 text-xs text-white placeholder-zinc-500 focus:border-[var(--accent-color)] focus:outline-none"
           />
           <svg
             className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500"
@@ -318,399 +460,521 @@ export default function MembersPage() {
         </div>
       </div>
 
-      {loading ? (
-        <div className="mt-12 flex flex-col items-center justify-center py-16 text-zinc-500">
-          <div className="h-8 w-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
-          <p className="mt-3 text-xs font-mono">Loading workspace team members...</p>
-        </div>
-      ) : (
-        <div className="mt-8 space-y-10">
-          {/* SECTION 1: MANAGERS & LEADERSHIP */}
-          {(selectedRoleFilter === "all" || selectedRoleFilter === "manager") && (
-            <div>
-              <div className="flex items-center gap-2.5 pb-3 mb-4 border-b border-zinc-800/80">
-                <span className="text-lg">👑</span>
-                <h2 className="text-base font-bold text-white tracking-wide">
-                  Managers & Technical Leadership
-                </h2>
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono text-amber-300">
-                  {managersList.length} {managersList.length === 1 ? "Leader" : "Leaders"}
-                </span>
-              </div>
-
-              {managersList.length === 0 ? (
-                <div className="p-8 rounded-2xl border border-zinc-800 bg-zinc-900/30 text-center text-xs text-zinc-500">
-                  No managers matching the search filter.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {managersList.map((member) => {
+      {/* ============================================================ */}
+      {/* TASK 1: CLEAN ON-PAGE MEMBERS MASTER LIST */}
+      {/* ============================================================ */}
+      <div className="mt-6">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+            <div
+              className="h-8 w-8 rounded-full border-2 border-transparent animate-spin"
+              style={{
+                borderTopColor: "var(--accent-color)",
+                borderRightColor: "var(--accent-color)",
+              }}
+            />
+            <p className="mt-3 text-xs font-mono">Loading talent directory...</p>
+          </div>
+        ) : filteredMembers.length === 0 ? (
+          <div className="p-12 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 text-center text-xs text-zinc-500">
+            No members matching your search or role filter.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-md shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-zinc-800/80 bg-zinc-950/60 text-zinc-400 font-mono uppercase text-[10px] tracking-wider">
+                    <th className="py-3.5 px-4 sm:px-6">Member Name & Identity</th>
+                    <th className="py-3.5 px-4">System Role</th>
+                    <th className="py-3.5 px-4 hidden md:table-cell">Technical Domain</th>
+                    <th className="py-3.5 px-4 hidden lg:table-cell">Department</th>
+                    <th className="py-3.5 px-4 text-center">Assigned Tasks</th>
+                    <th className="py-3.5 px-4 text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {filteredMembers.map((member) => {
                     const assignedTasks =
                       memberTasksMap[member.id] || memberTasksMap[member.name] || [];
-                    const inProgressTasks = assignedTasks.filter((t) => t.stage === "in_progress").length;
+                    const activeTasksCount = assignedTasks.filter(
+                      (t) => t.stage === "in_progress"
+                    ).length;
+                    const systemRole = member.system_role || "Member";
+                    const roleConfig = ROLE_CONFIG[systemRole] || ROLE_CONFIG.Member;
+                    const isSelected = activeMember?.id === member.id && isDrawerOpen;
 
                     return (
-                      <div
+                      <tr
                         key={member.id}
-                        onClick={() => setSelectedMemberForTasks(member)}
-                        className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 hover:border-amber-500/50 hover:bg-zinc-900/95 transition-all shadow-md cursor-pointer"
-                        title="Click to view assigned tasks and status details"
+                        onClick={() => handleOpenDrawer(member)}
+                        className={`group transition cursor-pointer ${
+                          isSelected
+                            ? "bg-zinc-800/70"
+                            : "hover:bg-zinc-850/50"
+                        }`}
                       >
-                        <div>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className="relative">
-                                <div
-                                  className={`h-12 w-12 rounded-xl bg-linear-to-tr ${member.avatar_color} flex items-center justify-center text-sm font-bold text-white shadow-md`}
-                                >
-                                  {member.name
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </div>
-                                <span
-                                  className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-zinc-900 ${
-                                    member.status === "online"
-                                      ? "bg-emerald-400"
-                                      : member.status === "away"
-                                      ? "bg-yellow-400"
-                                      : "bg-zinc-500"
-                                  }`}
-                                  title={`Status: ${member.status}`}
-                                />
-                              </div>
-
-                              <div>
-                                <h3 className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
-                                  <span>{member.name}</span>
-                                </h3>
-                                <p className="text-xs text-zinc-400">{member.role_title}</p>
-                              </div>
-                            </div>
-
-                            <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-amber-300">
-                              Manager
-                            </span>
-                          </div>
-
-                          <div className="mt-4 space-y-1 text-xs font-mono text-zinc-400">
-                            <div className="flex items-center gap-1.5 truncate">
-                              <span className="text-zinc-500">Email:</span>
-                              <span className="text-zinc-300">{member.email}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-500">Dept:</span>
-                              <span className="text-zinc-300">{member.department}</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-4">
-                            <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
-                              Leadership Domain
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {member.skills.map((s) => (
-                                <span
-                                  key={s}
-                                  className="rounded border border-zinc-800 bg-zinc-950/70 px-2 py-0.5 text-[10px] font-mono text-zinc-400"
-                                >
-                                  {s}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Bottom Bar: Read-only Task Status Indicator */}
-                        <div className="mt-5 pt-3.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
-                          <span className="text-zinc-400">
-                            <strong className="text-white font-bold">{assignedTasks.length}</strong> tasks assigned
-                            {inProgressTasks > 0 && (
-                              <span className="ml-1 text-amber-300 text-[10px]">({inProgressTasks} active)</span>
-                            )}
-                          </span>
-
-                          <span className="text-[11px] font-semibold text-amber-400 group-hover:underline flex items-center gap-1">
-                            <span>View Task Status</span>
-                            <span>&rarr;</span>
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* SECTION 2: DEVELOPERS & ENGINEERS */}
-          {(selectedRoleFilter === "all" || selectedRoleFilter === "developer") && (
-            <div>
-              <div className="flex items-center gap-2.5 pb-3 mb-4 border-b border-zinc-800/80">
-                <span className="text-lg">⚡</span>
-                <h2 className="text-base font-bold text-white tracking-wide">
-                  Developers & Engineering Specialists
-                </h2>
-                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-mono text-sky-300">
-                  {developersList.length} {developersList.length === 1 ? "Engineer" : "Engineers"}
-                </span>
-              </div>
-
-              {developersList.length === 0 ? (
-                <div className="p-8 rounded-2xl border border-zinc-800 bg-zinc-900/30 text-center text-xs text-zinc-500">
-                  No developers matching the search filter.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {developersList.map((member) => {
-                    const assignedTasks =
-                      memberTasksMap[member.id] || memberTasksMap[member.name] || [];
-                    const inProgressTasks = assignedTasks.filter((t) => t.stage === "in_progress").length;
-
-                    return (
-                      <div
-                        key={member.id}
-                        onClick={() => setSelectedMemberForTasks(member)}
-                        className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 hover:border-sky-500/50 hover:bg-zinc-900/95 transition-all shadow-md cursor-pointer"
-                        title="Click to view assigned tasks and status details"
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className="relative">
-                                <div
-                                  className={`h-12 w-12 rounded-xl bg-linear-to-tr ${member.avatar_color} flex items-center justify-center text-sm font-bold text-white shadow-md`}
-                                >
-                                  {member.name
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </div>
-                                <span
-                                  className={`absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-zinc-900 ${
-                                    member.status === "online"
-                                      ? "bg-emerald-400"
-                                      : member.status === "away"
-                                      ? "bg-yellow-400"
-                                      : "bg-zinc-500"
-                                  }`}
-                                  title={`Status: ${member.status}`}
-                                />
-                              </div>
-
-                              <div>
-                                <h3 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors flex items-center gap-1.5">
-                                  <span>{member.name}</span>
-                                </h3>
-                                <p className="text-xs text-zinc-400">{member.role_title}</p>
-                              </div>
-                            </div>
-
-                            <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-sky-300">
-                              Developer
-                            </span>
-                          </div>
-
-                          <div className="mt-4 space-y-1 text-xs font-mono text-zinc-400">
-                            <div className="flex items-center gap-1.5 truncate">
-                              <span className="text-zinc-500">Email:</span>
-                              <span className="text-zinc-300">{member.email}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-zinc-500">Dept:</span>
-                              <span className="text-zinc-300">{member.department}</span>
-                            </div>
-                          </div>
-
-                          <div className="mt-4">
-                            <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1.5">
-                              Tech Stack & Modules
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {member.skills.map((s) => (
-                                <span
-                                  key={s}
-                                  className="rounded border border-zinc-800 bg-zinc-950/70 px-2 py-0.5 text-[10px] font-mono text-zinc-400"
-                                >
-                                  {s}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Bottom Bar: Read-only Task Status Indicator */}
-                        <div className="mt-5 pt-3.5 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
-                          <span className="text-zinc-400">
-                            <strong className="text-white font-bold">{assignedTasks.length}</strong> tasks assigned
-                            {inProgressTasks > 0 && (
-                              <span className="ml-1 text-sky-300 text-[10px]">({inProgressTasks} active)</span>
-                            )}
-                          </span>
-
-                          <span className="text-[11px] font-semibold text-sky-400 group-hover:underline flex items-center gap-1">
-                            <span>View Task Status</span>
-                            <span>&rarr;</span>
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ============================================================ */}
-      {/* VIEW-ONLY MODAL: TASK DETAILS FOR MEMBER (ON CLICKING NAME) */}
-      {/* ============================================================ */}
-      {selectedMemberForTasks && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4"
-          onClick={() => setSelectedMemberForTasks(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Tasks assigned to ${selectedMemberForTasks.name}`}
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl animate-scale-up"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header: Member Profile */}
-            <div className="flex items-start justify-between gap-3 pb-4 border-b border-zinc-800">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`h-12 w-12 rounded-xl bg-linear-to-tr ${selectedMemberForTasks.avatar_color} flex items-center justify-center text-sm font-bold text-white shadow-md`}
-                >
-                  {selectedMemberForTasks.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-white">{selectedMemberForTasks.name}</h2>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                        selectedMemberForTasks.role_type === "manager"
-                          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                          : "border-sky-500/30 bg-sky-500/10 text-sky-300"
-                      }`}
-                    >
-                      {selectedMemberForTasks.role_type === "manager" ? "Manager / Lead" : "Developer"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">{selectedMemberForTasks.role_title} &bull; {selectedMemberForTasks.department}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedMemberForTasks(null)}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Subheader banner */}
-            <div className="mt-4 flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-950/70 text-xs font-mono">
-              <div className="flex items-center gap-2 text-zinc-300">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Assigned Task Portfolio (View-Only)</span>
-              </div>
-              <span className="text-zinc-400">
-                {currentMemberTasks.length} {currentMemberTasks.length === 1 ? "task" : "tasks"} on record
-              </span>
-            </div>
-
-            {/* List View of Tasks */}
-            <div className="mt-4 space-y-3">
-              {currentMemberTasks.length === 0 ? (
-                <div className="py-12 text-center text-zinc-500 text-xs font-mono border border-dashed border-zinc-800 rounded-xl">
-                  No active tasks currently assigned to {selectedMemberForTasks.name}.
-                </div>
-              ) : (
-                currentMemberTasks.map((t) => {
-                  const stageConf = STAGE_CONFIG[t.stage];
-                  const priorityConf = PRIORITY_CONFIG[t.priority] || PRIORITY_CONFIG.medium;
-
-                  return (
-                    <div
-                      key={t.id}
-                      className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/60 space-y-2.5"
-                    >
-                      {/* Top Row: Title + Project + Stage */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="text-[10px] font-mono uppercase tracking-wider text-indigo-400 block mb-0.5">
-                            {t.project_name}
-                          </span>
-                          <h4 className="text-xs sm:text-sm font-bold text-white">
-                            {t.title}
-                          </h4>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span
-                            className={`rounded-md border px-2 py-0.5 text-[10px] font-mono ${stageConf.badge}`}
-                          >
-                            Status: {stageConf.label}
-                          </span>
-                          <span
-                            className={`rounded-md border px-2 py-0.5 text-[10px] font-mono ${priorityConf.badge}`}
-                          >
-                            {priorityConf.label}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Description */}
-                      <p className="text-xs text-zinc-300 leading-relaxed">
-                        {t.description}
-                      </p>
-
-                      {/* Descriptive Paths Box (Read-only) */}
-                      {t.descriptive_paths && t.descriptive_paths.length > 0 && (
-                        <div className="pt-2 border-t border-zinc-850">
-                          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
-                            Descriptive Implementation Paths & Targets:
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {t.descriptive_paths.map((p) => (
-                              <span
-                                key={p}
-                                className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 font-mono text-[10px] text-emerald-400/90"
+                        {/* 1. Name & Avatar */}
+                        <td className="py-3.5 px-4 sm:px-6">
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              <div
+                                className={`h-10 w-10 shrink-0 rounded-xl bg-linear-to-tr ${member.avatar_color} flex items-center justify-center text-xs font-bold text-white shadow-xs group-hover:scale-105 transition-transform`}
                               >
-                                {p}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                                {member.name
+                                  .split(" ")
+                                  .map((n) => n[0])
+                                  .join("")}
+                              </div>
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 ${
+                                  member.status === "online"
+                                    ? "bg-emerald-400"
+                                    : member.status === "away"
+                                    ? "bg-amber-400"
+                                    : "bg-zinc-500"
+                                }`}
+                                title={`Status: ${member.status}`}
+                              />
+                            </div>
 
-                      {/* Due Date */}
-                      <div className="pt-2 border-t border-zinc-850 flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                        <span>Due Date: <strong className="text-zinc-200">{formatDate(t.due_date)}</strong></span>
-                        <span className="text-zinc-500">ID: {t.id}</span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-white group-hover:text-[var(--accent-text)] transition-colors truncate">
+                                {member.name}
+                              </p>
+                              <p className="text-[11px] text-zinc-400 font-mono truncate">
+                                {member.email}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 2. System Role Badge */}
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-mono border ${roleConfig.badge}`}
+                          >
+                            <span>{roleConfig.icon}</span>
+                            <span>{systemRole}</span>
+                          </span>
+                        </td>
+
+                        {/* 3. Role Title */}
+                        <td className="py-3.5 px-4 hidden md:table-cell text-zinc-300 truncate max-w-xs">
+                          {member.role_title}
+                        </td>
+
+                        {/* 4. Department */}
+                        <td className="py-3.5 px-4 hidden lg:table-cell text-zinc-400">
+                          <span className="rounded-md border border-zinc-800 bg-zinc-950/60 px-2 py-0.5 font-mono text-[10px]">
+                            {member.department}
+                          </span>
+                        </td>
+
+                        {/* 5. Assigned Tasks */}
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="inline-flex items-center gap-1 font-mono text-xs">
+                            <span className="text-white font-bold">{assignedTasks.length}</span>
+                            {activeTasksCount > 0 && (
+                              <span className="text-[10px] text-sky-400">
+                                ({activeTasksCount} active)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 6. Quick Action / Open Drawer Trigger */}
+                        <td className="py-3.5 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDrawer(member);
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 group-hover:text-white transition"
+                          >
+                            <span>View</span>
+                            <span className="text-[10px]">&rarr;</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ============================================================ */}
+      {/* TASK 1 & TASK 4: STREAMLINED SIDE DRAWER (MASTER-DETAIL) */}
+      {/* ============================================================ */}
+      {isDrawerOpen && (
+        <div
+          className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs transition-opacity duration-300"
+          onClick={handleCloseDrawer}
+          aria-modal="true"
+          role="dialog"
+          aria-labelledby="member-drawer-title"
+        >
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="w-screen max-w-md sm:max-w-xl bg-zinc-900 border-l border-zinc-800 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-hidden"
+            >
+              {/* Drawer Top Bar */}
+              <div className="p-6 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    {/* Avatar */}
+                    <div className="relative">
+                      <div
+                        className={`h-14 w-14 rounded-2xl bg-linear-to-tr ${activeMember?.avatar_color} flex items-center justify-center text-base font-bold text-white shadow-md`}
+                      >
+                        {activeMember?.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </div>
+                      <span
+                        className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-zinc-950 ${
+                          activeMember?.status === "online"
+                            ? "bg-emerald-400"
+                            : activeMember?.status === "away"
+                            ? "bg-amber-400"
+                            : "bg-zinc-500"
+                        }`}
+                      />
+                    </div>
+
+                    <div className="min-w-0">
+                      <h2
+                        id="member-drawer-title"
+                        className="text-lg font-bold text-white truncate"
+                      >
+                        {activeMember?.name}
+                      </h2>
+                      <p className="text-xs text-zinc-400 font-mono truncate">
+                        {activeMember?.email}
+                      </p>
+                      <p className="text-xs text-zinc-300 mt-0.5">
+                        {activeMember?.role_title} &bull; {activeMember?.department}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Close button */}
+                  <button
+                    type="button"
+                    onClick={handleCloseDrawer}
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+                    aria-label="Close details drawer"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* ============================================================ */}
+                {/* TASK 4: INTERACTIVE ROLE ASSIGNMENT DROPDOWN & STATUS */}
+                {/* ============================================================ */}
+                <div className="mt-5 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <label
+                        htmlFor="role-assignment-select"
+                        className="block text-xs font-semibold text-zinc-200"
+                      >
+                        Assign System Role & Privileges
+                      </label>
+                      <p className="text-[11px] text-zinc-400">
+                        {activeMember ? ROLE_CONFIG[activeMember.system_role || "Member"].desc : ""}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {updatingRoleId && (
+                        <div
+                          className="h-4 w-4 rounded-full border-2 border-transparent animate-spin"
+                          style={{
+                            borderTopColor: "var(--accent-color)",
+                            borderRightColor: "var(--accent-color)",
+                          }}
+                        />
+                      )}
+                      <select
+                        id="role-assignment-select"
+                        value={activeMember?.system_role || "Member"}
+                        disabled={updatingRoleId !== null}
+                        onChange={(e) => handleRoleChange(e.target.value as SystemRole)}
+                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white focus:border-[var(--accent-color)] focus:outline-none cursor-pointer"
+                      >
+                        <option value="Admin">👑 Admin</option>
+                        <option value="Editor">✏️ Editor</option>
+                        <option value="Member">👥 Member</option>
+                        <option value="Viewer">👁️ Viewer</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {roleChangeNotice && (
+                    <p className="mt-2 text-[11px] font-mono text-emerald-400">
+                      ✓ {roleChangeNotice}
+                    </p>
+                  )}
+                </div>
+
+                {/* Drawer Tab Navigation */}
+                <div className="mt-5 flex items-center gap-2 border-b border-zinc-800 -mb-6 pb-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setDrawerTab("overview")}
+                    className={`pb-2 px-1 font-medium transition cursor-pointer border-b-2 ${
+                      drawerTab === "overview"
+                        ? "border-[var(--accent-color)] text-white font-bold"
+                        : "border-transparent text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    Overview & Profile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerTab("tasks")}
+                    className={`pb-2 px-1 font-medium transition cursor-pointer border-b-2 flex items-center gap-1.5 ${
+                      drawerTab === "tasks"
+                        ? "border-[var(--accent-color)] text-white font-bold"
+                        : "border-transparent text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <span>Assigned Tasks</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800">
+                      {activeMemberTasks.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerTab("activity")}
+                    className={`pb-2 px-1 font-medium transition cursor-pointer border-b-2 ${
+                      drawerTab === "activity"
+                        ? "border-[var(--accent-color)] text-white font-bold"
+                        : "border-transparent text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    Activity Log
+                  </button>
+                </div>
+              </div>
+
+              {/* Drawer Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {drawerTab === "overview" && activeMember && (
+                  <div className="space-y-6 animate-fade-in">
+                    {/* Bio / About */}
+                    <div>
+                      <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
+                        About & Domain Focus
+                      </h3>
+                      <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-xs text-zinc-300 leading-relaxed">
+                        {activeMember.bio || "No extended biography provided for this member."}
                       </div>
                     </div>
-                  );
-                })
-              )}
-            </div>
 
-            {/* Bottom Done button */}
-            <div className="mt-6 pt-3 border-t border-zinc-800 flex justify-end">
-              <button
-                onClick={() => setSelectedMemberForTasks(null)}
-                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white cursor-pointer"
-              >
-                Close View
-              </button>
+                    {/* Metadata Grid */}
+                    <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                        <span className="text-zinc-500 text-[10px] block">Joined Date</span>
+                        <span className="text-zinc-200 font-semibold mt-0.5 block">
+                          {formatDate(activeMember.joined_date || activeMember.created_at)}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                        <span className="text-zinc-500 text-[10px] block">Role Classification</span>
+                        <span className="text-zinc-200 font-semibold mt-0.5 block capitalize">
+                          {activeMember.role_type}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                        <span className="text-zinc-500 text-[10px] block">Department</span>
+                        <span className="text-zinc-200 font-semibold mt-0.5 block">
+                          {activeMember.department}
+                        </span>
+                      </div>
+                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                        <span className="text-zinc-500 text-[10px] block">Member Identifier</span>
+                        <span className="text-zinc-200 font-semibold mt-0.5 block truncate">
+                          {activeMember.id}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Skills & Domain Competencies */}
+                    <div>
+                      <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
+                        Core Competencies & Toolchains
+                      </h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeMember.skills && activeMember.skills.length > 0 ? (
+                          activeMember.skills.map((skill) => (
+                            <span
+                              key={skill}
+                              className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950/70 text-xs font-mono text-zinc-300"
+                            >
+                              {skill}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-zinc-500 font-mono">No skills listed.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Assigned Projects */}
+                    <div>
+                      <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
+                        Assigned Project Portfolios
+                      </h3>
+                      <div className="space-y-2">
+                        {activeMember.assigned_projects && activeMember.assigned_projects.length > 0 ? (
+                          activeMember.assigned_projects.map((proj) => (
+                            <div
+                              key={proj}
+                              className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-950/60 text-xs"
+                            >
+                              <span className="font-semibold text-white">{proj}</span>
+                              <Link
+                                href="/projects"
+                                className="text-[11px] text-zinc-400 hover:text-white transition"
+                              >
+                                View Project &rarr;
+                              </Link>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/40 text-xs text-zinc-500">
+                            No active project portfolios assigned.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tasks Tab */}
+                {drawerTab === "tasks" && (
+                  <div className="space-y-3 animate-fade-in">
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-xs">
+                      <span className="text-zinc-400 font-mono uppercase text-[10px]">
+                        Active Task Portfolio ({activeMemberTasks.length})
+                      </span>
+                      <Link
+                        href="/projects"
+                        className="text-[11px] text-zinc-400 hover:text-white transition"
+                      >
+                        All Tasks &rarr;
+                      </Link>
+                    </div>
+
+                    {activeMemberTasks.length === 0 ? (
+                      <div className="py-12 text-center text-zinc-500 text-xs font-mono border border-dashed border-zinc-800 rounded-xl">
+                        No active tasks currently assigned to {activeMember?.name}.
+                      </div>
+                    ) : (
+                      activeMemberTasks.map((t) => {
+                        const stageConf = STAGE_CONFIG[t.stage];
+                        const priorityConf = PRIORITY_CONFIG[t.priority] || PRIORITY_CONFIG.medium;
+
+                        return (
+                          <div
+                            key={t.id}
+                            className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/60 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <span className="text-[10px] font-mono uppercase text-zinc-400 block">
+                                  {t.project_name}
+                                </span>
+                                <h4 className="text-xs font-bold text-white mt-0.5">{t.title}</h4>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${stageConf.badge}`}>
+                                  {stageConf.label}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-mono border ${priorityConf.badge}`}>
+                                  {priorityConf.label}
+                                </span>
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-zinc-300 leading-relaxed">{t.description}</p>
+
+                            {t.descriptive_paths && t.descriptive_paths.length > 0 && (
+                              <div className="pt-2 border-t border-zinc-850 flex flex-wrap gap-1">
+                                {t.descriptive_paths.map((p) => (
+                                  <span
+                                    key={p}
+                                    className="px-1.5 py-0.2 rounded border border-zinc-800 bg-zinc-900 font-mono text-[9px] text-emerald-400"
+                                  >
+                                    {p}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="pt-2 border-t border-zinc-850 flex items-center justify-between text-[10px] font-mono text-zinc-500">
+                              <span>Due: {formatDate(t.due_date)}</span>
+                              <span>ID: {t.id}</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {/* Activity Log Tab */}
+                {drawerTab === "activity" && activeMember && (
+                  <div className="space-y-3 animate-fade-in">
+                    <span className="text-zinc-400 font-mono uppercase text-[10px] block pb-2 border-b border-zinc-800">
+                      Audit Timeline & Session Events
+                    </span>
+
+                    {activeMember.activity_log && activeMember.activity_log.length > 0 ? (
+                      <div className="relative pl-4 space-y-4 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-800">
+                        {activeMember.activity_log.map((act) => (
+                          <div key={act.id} className="relative text-xs">
+                            <span className="absolute -left-[19px] top-1 h-2.5 w-2.5 rounded-full border-2 border-zinc-900 bg-zinc-400" />
+                            <p className="font-semibold text-white">{act.action}</p>
+                            {act.details && <p className="text-zinc-400 text-[11px] mt-0.5">{act.details}</p>}
+                            <span className="text-[10px] font-mono text-zinc-500 mt-1 block">
+                              {formatRelativeTime(act.timestamp)} &bull; {formatDate(act.timestamp)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center text-zinc-500 text-xs font-mono">
+                        No recorded activity logs for this member yet.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Drawer Bottom Bar */}
+              <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between">
+                <span className="text-[11px] font-mono text-zinc-500">
+                  Esc to close drawer
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCloseDrawer}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -733,7 +997,14 @@ export default function MembersPage() {
           >
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <div
+                  className="h-8 w-8 rounded-lg flex items-center justify-center"
+                  style={{
+                    backgroundColor: "var(--accent-subtle)",
+                    borderColor: "var(--accent-border)",
+                    color: "var(--accent-text)",
+                  }}
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                   </svg>
@@ -741,6 +1012,7 @@ export default function MembersPage() {
                 <h2 className="text-base font-bold text-white">Add Team Member</h2>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAddModalOpen(false)}
                 className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
               >
@@ -750,38 +1022,7 @@ export default function MembersPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddMember} className="mt-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                  Role Classification *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role_type: "manager" })}
-                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      formData.role_type === "manager"
-                        ? "border-amber-500/60 bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30"
-                        : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700"
-                    }`}
-                  >
-                    <span>👑 Manager / Lead</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, role_type: "developer" })}
-                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                      formData.role_type === "developer"
-                        ? "border-sky-500/60 bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/30"
-                        : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700"
-                    }`}
-                  >
-                    <span>⚡ Developer / Engineer</span>
-                  </button>
-                </div>
-              </div>
-
+            <form onSubmit={handleAddMember} className="mt-5 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
@@ -790,24 +1031,24 @@ export default function MembersPage() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Liam Sterling"
+                    placeholder="e.g. Jordan Blake"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Email Address *
+                    Work Email *
                   </label>
                   <input
                     type="email"
                     required
-                    placeholder="e.g. liam@cognitive.ai"
+                    placeholder="jordan.blake@cognitive.ai"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
                   />
                 </div>
               </div>
@@ -815,86 +1056,109 @@ export default function MembersPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Role Title
+                    System Role Access
                   </label>
-                  <input
-                    type="text"
-                    placeholder={
-                      formData.role_type === "manager"
-                        ? "e.g. Technical Director"
-                        : "e.g. Senior Backend Dev"
+                  <select
+                    value={formData.system_role}
+                    onChange={(e) =>
+                      setFormData({ ...formData, system_role: e.target.value as SystemRole })
                     }
-                    value={formData.role_title}
-                    onChange={(e) => setFormData({ ...formData, role_title: e.target.value })}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
-                  />
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                  >
+                    <option value="Admin">👑 Admin</option>
+                    <option value="Editor">✏️ Editor</option>
+                    <option value="Member">👥 Member</option>
+                    <option value="Viewer">👁️ Viewer</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Department
+                    Domain Role Type
                   </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. AI Systems"
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
-                  />
+                  <select
+                    value={formData.role_type}
+                    onChange={(e) =>
+                      setFormData({ ...formData, role_type: e.target.value as MemberRoleType })
+                    }
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                  >
+                    <option value="developer">Developer / Engineer</option>
+                    <option value="manager">Manager / Technical Lead</option>
+                  </select>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Skills & Expertise (comma separated)
+                  Role Title & Specialization
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. LangGraph, Python, Architecture, React"
-                  value={formData.skills}
-                  onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  placeholder="e.g. Senior LangGraph Engineer"
+                  value={formData.role_title}
+                  onChange={(e) => setFormData({ ...formData, role_title: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Avatar Theme
+                  Department
                 </label>
-                <select
-                  value={formData.avatar_color}
-                  onChange={(e) => setFormData({ ...formData, avatar_color: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
-                >
-                  {AVATAR_GRADIENTS.map((g) => (
-                    <option key={g.value} value={g.value}>
-                      {g.label}
-                    </option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  placeholder="e.g. AI Agent Development"
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Skills (comma separated)
+                </label>
+                <input
+                  type="text"
+                  placeholder="LangGraph, pgvector, Python, FastAPI"
+                  value={formData.skills}
+                  onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Brief Bio
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Key areas of technical ownership and project focus..."
+                  value={formData.bio}
+                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 rounded-lg border border-zinc-700 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-white transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                  style={{
+                    backgroundColor: "var(--accent-color)",
+                    boxShadow: "0 4px 14px var(--accent-glow)",
+                  }}
+                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
                 >
-                  {submitting ? (
-                    <>
-                      <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      <span>Saving...</span>
-                    </>
-                  ) : (
-                    <span>Add Member</span>
-                  )}
+                  {submitting ? "Adding..." : "Add Member"}
                 </button>
               </div>
             </form>
