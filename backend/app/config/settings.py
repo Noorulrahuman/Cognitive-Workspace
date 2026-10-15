@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     QDRANT_URL: str | None = None
     GEMINI_API_KEY: SecretStr | None = None
+    GROQ_API_KEY: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
