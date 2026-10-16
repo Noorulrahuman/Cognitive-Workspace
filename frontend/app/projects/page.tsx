@@ -150,11 +150,15 @@ const DEFAULT_PROJECTS: Project[] = [
   }
 ];
 
-const SQL_SCHEMA_TEXT = `-- Copy & paste into Supabase SQL Editor:
+const SQL_SCHEMA_TEXT = `-- Copy & paste into Supabase Dashboard -> SQL Editor:
+-- ==============================================================================
+-- 1. Table: public.projects
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
+    title TEXT,
     description TEXT DEFAULT '',
     category TEXT DEFAULT 'Agentic Workflow',
     tags TEXT[] DEFAULT ARRAY[]::TEXT[],
@@ -165,6 +169,24 @@ CREATE TABLE IF NOT EXISTS public.projects (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
+DROP POLICY IF EXISTS "Allow read projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow insert projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow update projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow delete projects" ON public.projects;
+
+CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
+CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
+
+-- ==============================================================================
+-- 2. Table: public.members
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.members (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -179,39 +201,78 @@ CREATE TABLE IF NOT EXISTS public.members (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow read members" ON public.members;
+DROP POLICY IF EXISTS "Allow insert members" ON public.members;
+DROP POLICY IF EXISTS "Allow update members" ON public.members;
+DROP POLICY IF EXISTS "Allow delete members" ON public.members;
+
+CREATE POLICY "Allow read members" ON public.members FOR SELECT USING (true);
+CREATE POLICY "Allow insert members" ON public.members FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update members" ON public.members FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete members" ON public.members FOR DELETE USING (true);
+
+-- ==============================================================================
+-- 3. Table: public.tasks
+-- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.tasks (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    project_name TEXT NOT NULL,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    due_date TIMESTAMPTZ,
+    stage TEXT DEFAULT 'todo',
+    project_name TEXT,
     descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
-    priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-    stage TEXT NOT NULL DEFAULT 'todo' CHECK (stage IN ('todo', 'in_progress', 'review', 'done')),
     assigned_to_id TEXT,
     assigned_to_name TEXT,
     assigned_to_role TEXT,
-    due_date DATE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+-- Safely add missing columns to tasks if table existed previously:
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'todo';
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS project_name TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_id TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_name TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_role TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
+-- Make user_id nullable so collaborative workspace members can contribute:
+ALTER TABLE public.tasks ALTER COLUMN user_id DROP NOT NULL;
+
+-- Drop old restrictive single-user policies:
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
+DROP POLICY IF EXISTS "Users can view own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can insert own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow read tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow insert tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow update tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow delete tasks" ON public.tasks;
 
-CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
-CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
-
-CREATE POLICY "Allow read members" ON public.members FOR SELECT USING (true);
-CREATE POLICY "Allow insert members" ON public.members FOR INSERT WITH CHECK (true);
-
+-- Collaborative tasks policies (all team members can read, add, update, delete tasks under projects):
 CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
 CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);`;
+CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);
+
+-- Enable Supabase Realtime so live changes immediately broadcast to other team members:
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+`;
 
 export default function ProjectsPage() {
   const supabase = createClient();
@@ -397,6 +458,54 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadWorkspaceData();
   }, [loadWorkspaceData]);
+
+  // Real-time synchronization for projects and tasks across all users
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel("realtime-workspace-projects-tasks")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks" },
+        () => {
+          fetchWorkspaceTasks(supabase).then((freshTasks) => {
+            setTasks(freshTasks);
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        () => {
+          listProjects().then((res) => {
+            if (res.success && Array.isArray(res.data)) {
+              setProjects(
+                res.data.map((item: any) => ({
+                  ...item,
+                  name: item.title || item.name || "Untitled Project",
+                  title: item.title || item.name || "Untitled Project",
+                  description: item.description ?? "",
+                  category: item.category || "Agentic Workflow",
+                  status: (item.status || "active").toLowerCase() === "active" ? "Active" : item.status,
+                  documents_count: item.documents_count || 0,
+                  tags: Array.isArray(item.tags)
+                    ? item.tags
+                    : typeof item.tags === "string"
+                    ? item.tags.replace(/[{}]/g, "").split(",").filter(Boolean)
+                    : ["Agentic Workflow"]
+                }))
+              );
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
 
   // NEW: apply the default view and order chosen in Account Settings
   useEffect(() => {
@@ -670,7 +779,13 @@ export default function ProjectsPage() {
       priority: "medium",
       stage: "todo",
     });
-    showToast(`Task "${newTask.title}" added to ${projectDetail.name}.`);
+    if (newTask.syncedToSupabase) {
+      showToast(`Task "${newTask.title}" added and synced to cloud.`, "success");
+    } else if (newTask.syncError) {
+      showToast(`Task added locally. (Supabase notice: ${newTask.syncError})`, "error");
+    } else {
+      showToast(`Task "${newTask.title}" added to ${projectDetail.name}.`);
+    }
   };
 
   // Quick Advance Task Stage inside project detail (optimistic update so task never vanishes)

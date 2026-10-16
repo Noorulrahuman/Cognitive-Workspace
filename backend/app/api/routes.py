@@ -486,7 +486,14 @@ async def list_tasks(project_id: Optional[str] = None, stage: Optional[str] = No
                 )
                 if res.status_code == 200:
                     data = res.json()
-                    if isinstance(data, list) and len(data) > 0:
+                    if isinstance(data, list):
+                        # Ensure stage is populated from status if stage column is not yet present
+                        for item in data:
+                            if not item.get("stage") and item.get("status"):
+                                st = item["status"]
+                                item["stage"] = "done" if st == "completed" else ("in_progress" if st == "in_progress" else "todo")
+                            if not item.get("descriptive_paths"):
+                                item["descriptive_paths"] = []
                         results = data
         except Exception:
             pass
@@ -499,22 +506,57 @@ async def list_tasks(project_id: Optional[str] = None, stage: Optional[str] = No
 
 @router.post("/tasks", response_model=Task, status_code=status.HTTP_201_CREATED, tags=["Tasks"])
 async def create_task(payload: TaskCreate):
+    task_id = str(uuid.uuid4())
+    status_val = "completed" if payload.stage == "done" else ("in_progress" if payload.stage in ("in_progress", "review") else "pending")
+    now_iso = datetime.utcnow().isoformat() + "Z"
+
     new_task = {
-        "id": f"task-{uuid.uuid4().hex[:8]}",
+        "id": task_id,
         **payload.dict(),
-        "created_at": datetime.utcnow().isoformat() + "Z",
-        "updated_at": datetime.utcnow().isoformat() + "Z"
+        "status": status_val,
+        "created_at": now_iso,
+        "updated_at": now_iso
     }
+
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
+                headers = get_supabase_headers()
+                headers["Prefer"] = "return=representation"
+                res = await client.post(
                     f"{SUPABASE_URL}/rest/v1/tasks",
-                    headers=get_supabase_headers(),
+                    headers=headers,
                     json=new_task
                 )
+                if res.status_code in (200, 201):
+                    created_list = res.json()
+                    if isinstance(created_list, list) and len(created_list) > 0:
+                        _TASKS_STORE.insert(0, created_list[0])
+                        return created_list[0]
+                elif res.status_code == 400:
+                    # Retry with core database fields only if extended columns are missing
+                    core_payload = {
+                        "id": task_id,
+                        "project_id": payload.project_id,
+                        "title": payload.title,
+                        "description": payload.description,
+                        "status": status_val,
+                        "priority": payload.priority,
+                        "due_date": payload.due_date,
+                        "created_at": now_iso,
+                        "updated_at": now_iso
+                    }
+                    retry_res = await client.post(
+                        f"{SUPABASE_URL}/rest/v1/tasks",
+                        headers=headers,
+                        json=core_payload
+                    )
+                    if retry_res.status_code in (200, 201):
+                        _TASKS_STORE.insert(0, new_task)
+                        return new_task
         except Exception:
             pass
+
     _TASKS_STORE.insert(0, new_task)
     return new_task
 
@@ -530,17 +572,29 @@ async def update_task(task_id: str, updates: TaskUpdate):
         raise HTTPException(status_code=404, detail="Task not found")
 
     update_dict = updates.dict(exclude_unset=True)
+    if "stage" in update_dict and update_dict["stage"]:
+        st = update_dict["stage"]
+        update_dict["status"] = "completed" if st == "done" else ("in_progress" if st in ("in_progress", "review") else "pending")
+
     update_dict["updated_at"] = datetime.utcnow().isoformat() + "Z"
     target.update(update_dict)
 
     if SUPABASE_URL and SUPABASE_KEY:
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.patch(
+                res = await client.patch(
                     f"{SUPABASE_URL}/rest/v1/tasks?id=eq.{task_id}",
                     headers=get_supabase_headers(),
                     json=update_dict
                 )
+                if res.status_code == 400:
+                    # Retry with core fields
+                    core_updates = {k: v for k, v in update_dict.items() if k in ("title", "description", "status", "priority", "due_date", "updated_at")}
+                    await client.patch(
+                        f"{SUPABASE_URL}/rest/v1/tasks?id=eq.{task_id}",
+                        headers=get_supabase_headers(),
+                        json=core_updates
+                    )
         except Exception:
             pass
 

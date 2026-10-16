@@ -44,19 +44,10 @@ CREATE TRIGGER trigger_projects_updated_at
 
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users can view own projects" ON public.projects;
-DROP POLICY IF EXISTS "Users can insert own projects" ON public.projects;
-DROP POLICY IF EXISTS "Users can update own projects" ON public.projects;
-DROP POLICY IF EXISTS "Users can delete own projects" ON public.projects;
-DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
-
-CREATE POLICY "projects_select_policy" ON public.projects FOR SELECT TO authenticated USING (auth.uid() = user_id);
-CREATE POLICY "projects_insert_policy" ON public.projects FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "projects_update_policy" ON public.projects FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "projects_delete_policy" ON public.projects FOR DELETE TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
+CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
 
 -- 2. Table: public.members (Separates Managers and Developers)
 CREATE TABLE IF NOT EXISTS public.members (
@@ -122,20 +113,20 @@ DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
 DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
 DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
 DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
+DROP POLICY IF EXISTS "Allow read tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow insert tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow update tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow delete tasks" ON public.tasks;
 
--- Enforce ownership inheritance through projects
-CREATE POLICY "tasks_select_policy" ON public.tasks FOR SELECT TO authenticated
-    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+-- Collaborative tasks policies: team members can view, create, edit, and delete tasks under projects
+CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
+CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);
 
-CREATE POLICY "tasks_insert_policy" ON public.tasks FOR INSERT TO authenticated
-    WITH CHECK (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
-
-CREATE POLICY "tasks_update_policy" ON public.tasks FOR UPDATE TO authenticated
-    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()))
-    WITH CHECK (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
-
-CREATE POLICY "tasks_delete_policy" ON public.tasks FOR DELETE TO authenticated
-    USING (EXISTS (SELECT 1 FROM public.projects p WHERE p.id = tasks.project_id AND p.user_id = auth.uid()));
+-- Enable Supabase Realtime so changes immediately reflect on other users' browsers
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
 
 -- 4. Initial Seed Projects
 INSERT INTO public.projects (id, name, description, category, tags, source_url, documents_count, status, created_at)
