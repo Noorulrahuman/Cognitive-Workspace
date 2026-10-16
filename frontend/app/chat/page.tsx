@@ -14,8 +14,12 @@ import { createClient } from "@/utils/supabase/client";
  *   4. Contextual prompt input with streaming-like animation
  * ========================================================================== */
 
-const IS_DEMO_MODE = true;
+const IS_DEMO_MODE = false;
 const GENERAL_PROJECT = "General Cognitive Workspace";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;   // put this at the top of the file, outside the component
+
+
 
 interface Message {
   id: string;
@@ -79,19 +83,20 @@ function ChatContent() {
   const [inputPrompt, setInputPrompt] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+   
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+//   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isProcessing]);
 
-  useEffect(() => {
-    return () => {
-      if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
-    };
-  }, []);
+ useEffect(() => {
+  return () => abortRef.current?.abort();
+}, []);
 
   const [projectsList, setProjectsList] = useState<string[]>([
     "Financial Document Intelligence",
@@ -143,68 +148,72 @@ function ChatContent() {
     ? projectsList
     : [selectedProject, ...projectsList];
 
-  const handleSendMessage = (textToSend?: string) => {
-    const text = (textToSend || inputPrompt).trim();
-    if (!text || isProcessing) return;
+ const handleSendMessage = async (textToSend?: string) => {
+  const text = (textToSend || inputPrompt).trim();
+  if (!text || isProcessing) return;
 
-    const userMsg: Message = {
-      id: getNextMessageId("user"),
-      sender: "user",
-      content: text,
-      timestamp: getFormattedTime(),
-    };
+  const userMsg: Message = {
+    id: getNextMessageId("user"),
+    sender: "user",
+    content: text,
+    timestamp: getFormattedTime(),
+  };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInputPrompt("");
-    setIsProcessing(true);
+  setMessages((prev) => [...prev, userMsg]);
+  setInputPrompt("");
+  setIsProcessing(true);
 
-    replyTimerRef.current = setTimeout(() => {
-      const lower = text.toLowerCase();
-      let responseText = "";
-      let steps: string[] = [];
+  const controller = new AbortController();
+  abortRef.current = controller;
 
-      if (lower.includes("extract") || lower.includes("table") || lower.includes("number") || lower.includes("metric")) {
-        steps = [
-          "Scanned ingested documents via PyMuPDF",
-          "Extracted multi-column tabular metrics",
-          "Normalized via Gemini reasoning loop",
-        ];
-        responseText = `Gemini extracted 3 key structured findings from "${selectedProject}":\n\n1. **YoY Revenue Expansion**: +14.2% verified against SEC filings\n2. **Operating Efficiency**: 28.5% operating margin\n3. **Free Cash Flow Velocity**: $4.1B cash reserves\n\nAll tables normalized and grounded in vector context.`;
-      } else if (lower.includes("search") || lower.includes("find") || lower.includes("relevant")) {
-        steps = [
-          "Generated dense 1536-dim text embedding",
-          "Executed pgvector cosine similarity search",
-          "Ranked top 5 context passages",
-        ];
-        responseText = `Gemini retrieved 5 high-confidence passages from "${selectedProject}". Semantic similarity is above 0.88 with no conflicting claims across the indexed literature.`;
-      } else {
-        steps = [
-          "Loaded project contextual state",
-          "Grounded prompt against LangGraph workflow",
-          "Formulated multi-agent response",
-        ];
-        responseText = `Here is Gemini's executive analysis for "${selectedProject}": All documents and task pipelines are active with healthy vector indices. You can ask for specific ratio analyses, tabular extracts, or task assignments.`;
-      }
+  try {
+    const res = await fetch(`${API_URL}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, session_id: sessionId }),
+      signal: controller.signal,
+    });
 
-      const geminiMsg: Message = {
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(typeof err?.detail === "string" ? err.detail : `Server error ${res.status}`);
+    }
+
+    const data = await res.json();
+    setSessionId(data.session_id);
+    setMessages((prev) => [
+      ...prev,
+      {
         id: getNextMessageId("gemini"),
         sender: "gemini",
-        content: responseText,
+        content: data.reply,
         timestamp: getFormattedTime(),
-        steps,
-      };
-
-      setMessages((prev) => [...prev, geminiMsg]);
-      setIsProcessing(false);
-    }, 1200);
-  };
+      },
+    ]);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return;
+    const msg = e instanceof Error ? e.message : "Something went wrong.";
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: getNextMessageId("gemini"),
+        sender: "gemini",
+        content: `⚠️ ${msg}`,
+        timestamp: getFormattedTime(),
+      },
+    ]);
+  } finally {
+    if (abortRef.current === controller) setIsProcessing(false);
+  }
+};
 
   const handleNewChat = () => {
-    if (replyTimerRef.current) clearTimeout(replyTimerRef.current);
-    setMessages([]);
-    setInputPrompt("");
-    setIsProcessing(false);
-  };
+  abortRef.current?.abort();
+  setSessionId(null);
+  setMessages([]);
+  setInputPrompt("");
+  setIsProcessing(false);
+};
 
   const handleCopy = (m: Message) => {
     navigator.clipboard.writeText(m.content);
