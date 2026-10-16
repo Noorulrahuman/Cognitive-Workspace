@@ -54,11 +54,61 @@ export interface Task {
   due_date: string;             // ISO Date string YYYY-MM-DD
   created_at: string;
   updated_at?: string;
+  syncedToSupabase?: boolean;
+  syncError?: string;
 }
 
 // ==============================================================================
 // INITIAL SEED DATA
 // ==============================================================================
+
+export interface ProjectSeed {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  source_url?: string | null;
+  documents_count: number;
+  status: string;
+  created_at: string;
+}
+
+export const DEFAULT_PROJECTS: ProjectSeed[] = [
+  {
+    id: "d1a1b1c1-1111-4000-8000-000000000001",
+    name: "Financial Document Intelligence",
+    description: "Multi-agent extraction and automated ratio analysis on 10-K financial reports using PyMuPDF and LangGraph.",
+    category: "Agentic Workflow",
+    tags: ["LangGraph", "PyMuPDF", "FastAPI"],
+    source_url: "https://sec.gov/edgar",
+    documents_count: 14,
+    status: "Active",
+    created_at: "2026-10-01T10:00:00Z",
+  },
+  {
+    id: "d2a2b2c2-2222-4000-8000-000000000002",
+    name: "Biomedical Literature Search",
+    description: "Hybrid vector search across PubMed and Europe PMC with citation graph exploration and reranking.",
+    category: "RAG & Search",
+    tags: ["Hybrid Search", "PubMed", "Cohere Rerank"],
+    source_url: "https://europepmc.org",
+    documents_count: 8,
+    status: "Active",
+    created_at: "2026-10-02T11:00:00Z",
+  },
+  {
+    id: "d3a3b3c3-3333-4000-8000-000000000003",
+    name: "Regulatory Web Scraper",
+    description: "Continuous monitoring of FDA and EMA regulatory notices with change diffing and slack alerts.",
+    category: "Data Pipeline",
+    tags: ["Playwright", "Diffing", "Webhooks"],
+    source_url: "https://fda.gov",
+    documents_count: 3,
+    status: "Active",
+    created_at: "2026-10-03T09:30:00Z",
+  },
+];
 
 export const DEFAULT_MEMBERS: Member[] = [
   // --- MANAGERS ---
@@ -802,17 +852,29 @@ export function mapStatusToStage(status?: string): TaskStage {
   return "todo";
 }
 
+export function generateUUID(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export async function fetchWorkspaceTasks(
   supabase?: SupabaseClient
 ): Promise<Task[]> {
-  // 1. Supabase Cloud Sync
+  // 1. Supabase Cloud Sync (Authoritative for all team members)
   if (supabase) {
     try {
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
         .order("created_at", { ascending: false });
-      if (!error && Array.isArray(data) && data.length > 0) {
+
+      if (!error && Array.isArray(data)) {
         const localCurrent = getTasksLocal();
         const localMap = new Map(localCurrent.map((t) => [t.id, t]));
 
@@ -824,31 +886,33 @@ export async function fetchWorkspaceTasks(
             project_name: t.project_name || localMatch?.project_name || "Project",
             title: t.title,
             description: t.description ?? "",
-            descriptive_paths: t.descriptive_paths || localMatch?.descriptive_paths || [],
+            descriptive_paths: Array.isArray(t.descriptive_paths)
+              ? t.descriptive_paths
+              : localMatch?.descriptive_paths || [],
             priority: (t.priority || "medium") as TaskPriority,
-            stage: t.stage || mapStatusToStage(t.status),
+            stage: (t.stage as TaskStage) || mapStatusToStage(t.status),
             assigned_to_id: t.assigned_to_id || localMatch?.assigned_to_id || null,
             assigned_to_name: t.assigned_to_name || localMatch?.assigned_to_name || null,
             assigned_to_role: t.assigned_to_role || localMatch?.assigned_to_role || null,
             due_date: t.due_date ? String(t.due_date).split("T")[0] : localMatch?.due_date || "",
             created_at: t.created_at || new Date().toISOString(),
             updated_at: t.updated_at || new Date().toISOString(),
+            syncedToSupabase: true,
           };
         });
 
-        // Merge any local-only tasks not yet in Supabase
-        const remoteIds = new Set(mapped.map((m) => m.id));
-        const merged = [...mapped, ...localCurrent.filter((l) => !remoteIds.has(l.id))];
-
-        saveTasksLocal(merged);
-        return merged;
+        // Save authoritative remote truth to local storage cache
+        saveTasksLocal(mapped);
+        return mapped;
+      } else if (error) {
+        console.warn("Supabase tasks fetch warning:", error.message);
       }
-    } catch {
-      // Ignored
+    } catch (err) {
+      console.warn("Supabase tasks fetch failed:", err);
     }
   }
 
-  // 2. Local Storage Preservation (prevents newly created / updated tasks from being wiped)
+  // 2. Local Storage Fallback (only used when database is unreachable)
   if (typeof window !== "undefined") {
     const local = localStorage.getItem(LS_TASKS_KEY);
     if (local) {
@@ -884,19 +948,18 @@ export async function createWorkspaceTask(
   supabase?: SupabaseClient,
   userId?: string
 ): Promise<Task> {
-  const generatedId =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `task-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  // Always generate a genuine RFC4122 v4 UUID so Postgres UUID type constraint never fails
+  const generatedId = generateUUID();
 
   const newTask: Task = {
     ...payload,
     id: generatedId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    syncedToSupabase: false,
   };
 
-  // Immediate local save
+  // Immediate optimistic local save
   const currentLocal = getTasksLocal();
   const updated = [newTask, ...currentLocal.filter((t) => t.id !== newTask.id)];
   saveTasksLocal(updated);
@@ -904,25 +967,91 @@ export async function createWorkspaceTask(
   // Supabase sync
   if (supabase) {
     try {
-      const dbPayload: Record<string, any> = {
+      // 1. Resolve current authenticated user if not explicitly passed
+      if (!userId) {
+        try {
+          const { data: authData } = await supabase.auth.getUser();
+          if (authData?.user?.id) {
+            userId = authData.user.id;
+          }
+        } catch {
+          // Unauthenticated
+        }
+      }
+
+      // 2. If project is one of the initial seed projects, ensure parent project row exists in Supabase
+      const isSeed = DEFAULT_PROJECTS.find((p) => p.id === newTask.project_id);
+      if (isSeed) {
+        try {
+          await supabase.from("projects").upsert(
+            {
+              id: isSeed.id,
+              name: isSeed.name,
+              title: isSeed.name,
+              description: isSeed.description,
+              category: isSeed.category,
+              tags: isSeed.tags,
+              source_url: isSeed.source_url,
+              documents_count: isSeed.documents_count,
+              status: isSeed.status,
+              created_at: isSeed.created_at,
+            },
+            { onConflict: "id" }
+          );
+        } catch {
+          // Ignore upsert error
+        }
+      }
+
+      // 3. Prepare core database payload (compatible with base tasks table)
+      const corePayload: Record<string, any> = {
         id: newTask.id,
         project_id: newTask.project_id,
         title: newTask.title,
-        description: newTask.description,
+        description: newTask.description || "",
         status: mapStageToStatus(newTask.stage),
-        priority: newTask.priority,
+        priority: newTask.priority || "medium",
         due_date: newTask.due_date ? new Date(newTask.due_date).toISOString() : null,
         created_at: newTask.created_at,
         updated_at: newTask.updated_at,
       };
 
       if (userId) {
-        dbPayload.user_id = userId;
+        corePayload.user_id = userId;
       }
 
-      await supabase.from("tasks").insert([dbPayload]);
-    } catch {
-      // Ignored
+      // 4. Extended payload with stage, member, and path metadata
+      const fullPayload: Record<string, any> = {
+        ...corePayload,
+        stage: newTask.stage,
+        project_name: newTask.project_name,
+        descriptive_paths: Array.isArray(newTask.descriptive_paths) ? newTask.descriptive_paths : [],
+        assigned_to_id: newTask.assigned_to_id || null,
+        assigned_to_name: newTask.assigned_to_name || null,
+        assigned_to_role: newTask.assigned_to_role || null,
+      };
+
+      // Try full insert first; if database lacks extended columns (PGRST204), fallback to core columns
+      let res = await supabase.from("tasks").insert([fullPayload]).select().single();
+      if (res.error && res.error.code === "PGRST204") {
+        res = await supabase.from("tasks").insert([corePayload]).select().single();
+      }
+
+      if (res.error) {
+        console.error("Supabase createWorkspaceTask failed:", res.error);
+        newTask.syncedToSupabase = false;
+        newTask.syncError = res.error.message;
+      } else {
+        newTask.syncedToSupabase = true;
+        // Update local storage entry to record synced status
+        saveTasksLocal(
+          getTasksLocal().map((t) => (t.id === newTask.id ? { ...t, syncedToSupabase: true } : t))
+        );
+      }
+    } catch (err: any) {
+      console.error("Supabase createWorkspaceTask exception:", err);
+      newTask.syncedToSupabase = false;
+      newTask.syncError = err?.message || "Network error";
     }
   }
 
@@ -957,19 +1086,35 @@ export async function updateWorkspaceTask(
   // Supabase sync
   if (supabase) {
     try {
-      const dbUpdates: Record<string, any> = {
+      const fullUpdates: Record<string, any> = {
         ...updates,
         updated_at: nowIso,
       };
       if (updates.stage) {
-        dbUpdates.status = mapStageToStatus(updates.stage);
+        fullUpdates.status = mapStageToStatus(updates.stage);
+        fullUpdates.stage = updates.stage;
       }
       if (updates.due_date) {
-        dbUpdates.due_date = new Date(updates.due_date).toISOString();
+        fullUpdates.due_date = new Date(updates.due_date).toISOString();
       }
-      await supabase.from("tasks").update(dbUpdates).eq("id", taskId);
-    } catch {
-      // Ignored
+
+      let res = await supabase.from("tasks").update(fullUpdates).eq("id", taskId);
+      if (res.error && res.error.code === "PGRST204") {
+        // Table doesn't have extended columns; retry with core columns only
+        const coreUpdates: Record<string, any> = { updated_at: nowIso };
+        if (updates.title !== undefined) coreUpdates.title = updates.title;
+        if (updates.description !== undefined) coreUpdates.description = updates.description;
+        if (updates.priority !== undefined) coreUpdates.priority = updates.priority;
+        if (updates.stage !== undefined) coreUpdates.status = mapStageToStatus(updates.stage);
+        if (updates.due_date !== undefined) coreUpdates.due_date = new Date(updates.due_date).toISOString();
+        res = await supabase.from("tasks").update(coreUpdates).eq("id", taskId);
+      }
+
+      if (res.error) {
+        console.error("Supabase updateWorkspaceTask failed:", res.error);
+      }
+    } catch (err) {
+      console.error("Supabase updateWorkspaceTask exception:", err);
     }
   }
 
@@ -997,9 +1142,12 @@ export async function deleteWorkspaceTask(
 
   if (supabase) {
     try {
-      await supabase.from("tasks").delete().eq("id", taskId);
-    } catch {
-      // Ignored
+      const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+      if (error) {
+        console.error("Supabase deleteWorkspaceTask failed:", error);
+      }
+    } catch (err) {
+      console.error("Supabase deleteWorkspaceTask exception:", err);
     }
   }
 

@@ -16,7 +16,104 @@ import {
   updateWorkspaceTask,
   deleteWorkspaceTask,
   fetchWorkspaceMembers,
+  mapStatusToStage,
 } from "@/utils/workspaceData";
+
+const SQL_SCHEMA_TEXT = `-- Copy & paste into Supabase Dashboard -> SQL Editor:
+-- ==============================================================================
+-- 1. Table: public.projects
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    title TEXT,
+    description TEXT DEFAULT '',
+    category TEXT DEFAULT 'Agentic Workflow',
+    tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+    source_url TEXT,
+    documents_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'Active',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
+DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
+DROP POLICY IF EXISTS "Allow read projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow insert projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow update projects" ON public.projects;
+DROP POLICY IF EXISTS "Allow delete projects" ON public.projects;
+
+CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
+CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
+
+-- ==============================================================================
+-- 2. Table: public.tasks
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    due_date TIMESTAMPTZ,
+    stage TEXT DEFAULT 'todo',
+    project_name TEXT,
+    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
+    assigned_to_id TEXT,
+    assigned_to_name TEXT,
+    assigned_to_role TEXT,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Safely add missing columns to tasks if table existed previously:
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'todo';
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS project_name TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_id TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_name TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_role TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+
+-- Make user_id nullable so collaborative workspace members can contribute:
+ALTER TABLE public.tasks ALTER COLUMN user_id DROP NOT NULL;
+
+-- Drop old restrictive single-user policies:
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
+DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
+DROP POLICY IF EXISTS "Users can view own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can insert own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow read tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow insert tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow update tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Allow delete tasks" ON public.tasks;
+
+-- Collaborative tasks policies (all team members can read, add, update, delete tasks under projects):
+CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
+CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);
+
+-- Enable Supabase Realtime so live changes immediately broadcast to other team members:
+ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+`;
 
 interface Project {
   id: string;
@@ -151,6 +248,9 @@ export default function ProjectTasksPage({
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isSqlModalOpen, setIsSqlModalOpen] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [supabaseNotice, setSupabaseNotice] = useState<string | null>(null);
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
   const [isEditingTaskInfo, setIsEditingTaskInfo] = useState<boolean>(false);
   const [editTitle, setEditTitle] = useState<string>("");
@@ -159,6 +259,7 @@ export default function ProjectTasksPage({
   const [editPriority, setEditPriority] = useState<TaskPriority>("medium");
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error" | "info">("success");
 
   const openTaskDetail = (task: Task) => {
     setTaskDetail(task);
@@ -167,6 +268,12 @@ export default function ProjectTasksPage({
     setEditDescription(task.description || "");
     setEditPathsText((task.descriptive_paths || []).join("\n"));
     setEditPriority(task.priority);
+  };
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SQL_SCHEMA_TEXT);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
   };
 
   // Form State with Description Box & Descriptive Paths Box
@@ -180,8 +287,9 @@ export default function ProjectTasksPage({
     stage: "todo" as TaskStage,
   });
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, type: "success" | "error" | "info" = "success") => {
     setToastMessage(msg);
+    setToastType(type);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -263,11 +371,100 @@ export default function ProjectTasksPage({
     loadProjectAndTasks();
   }, [loadProjectAndTasks]);
 
+  // Real-time synchronization for project tasks: instant collaboration across all users
+  useEffect(() => {
+    if (!supabase || !project) return;
+
+    const channel = supabase
+      .channel(`realtime-project-tasks-${project.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tasks",
+        },
+        (payload) => {
+          const row = (payload.new || payload.old) as any;
+          const matchesProject =
+            row?.project_id === project.id ||
+            row?.project_name === project.name ||
+            (project.name && row?.project_id === project.name);
+
+          if (!matchesProject && payload.eventType !== "DELETE") return;
+
+          if (payload.eventType === "INSERT") {
+            const mapped: Task = {
+              id: payload.new.id,
+              project_id: payload.new.project_id,
+              project_name: payload.new.project_name || project.name,
+              title: payload.new.title,
+              description: payload.new.description ?? "",
+              descriptive_paths: Array.isArray(payload.new.descriptive_paths) ? payload.new.descriptive_paths : [],
+              priority: (payload.new.priority || "medium") as TaskPriority,
+              stage: (payload.new.stage as TaskStage) || mapStatusToStage(payload.new.status),
+              assigned_to_id: payload.new.assigned_to_id || null,
+              assigned_to_name: payload.new.assigned_to_name || null,
+              assigned_to_role: payload.new.assigned_to_role || null,
+              due_date: payload.new.due_date ? String(payload.new.due_date).split("T")[0] : "",
+              created_at: payload.new.created_at || new Date().toISOString(),
+              updated_at: payload.new.updated_at || new Date().toISOString(),
+              syncedToSupabase: true,
+            };
+
+            setTasks((prev) => {
+              if (prev.some((t) => t.id === mapped.id)) {
+                return prev.map((t) => (t.id === mapped.id ? { ...t, ...mapped } : t));
+              }
+              return [mapped, ...prev];
+            });
+            showToast(`Task "${mapped.title}" synced from cloud.`, "success");
+          } else if (payload.eventType === "UPDATE") {
+            const mappedUpdates: Partial<Task> = {
+              title: payload.new.title,
+              description: payload.new.description ?? "",
+              descriptive_paths: Array.isArray(payload.new.descriptive_paths) ? payload.new.descriptive_paths : undefined,
+              priority: (payload.new.priority || "medium") as TaskPriority,
+              stage: (payload.new.stage as TaskStage) || mapStatusToStage(payload.new.status),
+              assigned_to_id: payload.new.assigned_to_id || null,
+              assigned_to_name: payload.new.assigned_to_name || null,
+              assigned_to_role: payload.new.assigned_to_role || null,
+              due_date: payload.new.due_date ? String(payload.new.due_date).split("T")[0] : "",
+              updated_at: payload.new.updated_at || new Date().toISOString(),
+              syncedToSupabase: true,
+            };
+
+            setTasks((prev) =>
+              prev.map((t) => (t.id === payload.new.id ? { ...t, ...mappedUpdates } : t))
+            );
+            if (taskDetail?.id === payload.new.id) {
+              setTaskDetail((prev) => (prev ? { ...prev, ...mappedUpdates } : null));
+            }
+          } else if (payload.eventType === "DELETE") {
+            const deletedId = (payload.old as any)?.id;
+            if (deletedId) {
+              setTasks((prev) => prev.filter((t) => t.id !== deletedId));
+              if (taskDetail?.id === deletedId) {
+                setTaskDetail(null);
+              }
+              showToast("A task was removed in Supabase.", "info");
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, project, taskDetail?.id]);
+
   // Esc key listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsAddModalOpen(false);
+        setIsSqlModalOpen(false);
         setTaskDetail(null);
       }
     };
@@ -360,7 +557,15 @@ export default function ProjectTasksPage({
       stage: "todo",
     });
     setSubmitting(false);
-    showToast(`Task "${newTask.title}" added to project.`);
+
+    if (newTask.syncedToSupabase) {
+      showToast(`Task "${newTask.title}" added and synced to cloud database.`, "success");
+    } else if (newTask.syncError) {
+      setSupabaseNotice(`Supabase RLS Policy / Schema Notice: ${newTask.syncError}`);
+      showToast(`Saved locally. Supabase write notice: ${newTask.syncError}`, "error");
+    } else {
+      showToast(`Task "${newTask.title}" added to project.`);
+    }
   };
 
   // Handle Update Task in Details Modal
@@ -435,9 +640,54 @@ export default function ProjectTasksPage({
     <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-8">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-indigo-500/30 bg-zinc-900/95 px-4 py-3 text-xs font-semibold text-indigo-300 shadow-2xl backdrop-blur-md animate-scale-up">
-          <span className="h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
+        <div
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-xs font-semibold shadow-2xl backdrop-blur-md animate-scale-up ${
+            toastType === "error"
+              ? "border-rose-500/30 bg-rose-950/95 text-rose-200"
+              : toastType === "info"
+              ? "border-sky-500/30 bg-sky-950/95 text-sky-200"
+              : "border-indigo-500/30 bg-zinc-900/95 text-indigo-300"
+          }`}
+        >
+          <span
+            className={`h-2 w-2 rounded-full ${
+              toastType === "error"
+                ? "bg-rose-400"
+                : toastType === "info"
+                ? "bg-sky-400"
+                : "bg-indigo-400"
+            } animate-ping`}
+          />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Supabase Notice Banner */}
+      {supabaseNotice && (
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200">
+          <div className="flex items-center gap-2.5">
+            <svg className="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="text-xs">
+              <span className="font-semibold text-amber-100">Database notice:  </span>
+              {supabaseNotice}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsSqlModalOpen(true)}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer transition shadow-xs"
+            >
+              View SQL Schema
+            </button>
+            <button
+              onClick={() => setSupabaseNotice(null)}
+              className="px-3 py-1.5 rounded-lg border border-amber-500/30 text-amber-200 hover:bg-amber-500/20 text-xs font-semibold cursor-pointer transition"
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 
@@ -483,6 +733,17 @@ export default function ProjectTasksPage({
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0">
+              <button
+                onClick={() => setIsSqlModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition cursor-pointer"
+                title="View Supabase Schema & Collaborative Migration SQL"
+              >
+                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-16 5h16" />
+                </svg>
+                <span>Database Schema</span>
+              </button>
+
               <Link
                 href={`/chat?project=${encodeURIComponent(project.name)}`}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/50 text-xs font-semibold text-indigo-200 transition"
@@ -1378,6 +1639,77 @@ export default function ProjectTasksPage({
               <button
                 onClick={() => setTaskDetail(null)}
                 className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supabase Schema Migration Modal */}
+      {isSqlModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-16 5h16" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">Supabase Schema Migration</h2>
+                  <p className="text-xs text-zinc-400">Run this SQL in your Supabase Dashboard &rarr; SQL Editor for full multi-user collaborative sync</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-mono text-zinc-400">schema.sql (Projects & Tasks Collaborative RLS)</span>
+                <button
+                  onClick={handleCopySql}
+                  className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
+                >
+                  {copiedSql ? (
+                    <>
+                      <svg className="w-3.5 h-3.5 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span>Copy SQL</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="relative rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-emerald-400/90 overflow-x-auto max-h-72 select-all">
+                <pre>{SQL_SCHEMA_TEXT}</pre>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+              <button
+                onClick={() => setIsSqlModalOpen(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white cursor-pointer"
               >
                 Close
               </button>
