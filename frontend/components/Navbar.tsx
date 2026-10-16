@@ -153,17 +153,45 @@ export default function Navbar() {
           <Link href="/" className="flex items-center gap-3 group">
             <CognitiveLogo size="sm" variant="icon" animated={true} />
             <div className="flex flex-col">
+              <style>{`
+                @keyframes cw-bolt-flicker {
+                  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+                    opacity: 1;
+                    filter: drop-shadow(0 0 6px rgba(0,212,255,0.95)) drop-shadow(0 0 16px rgba(0,144,255,0.75));
+                  }
+                  20%, 24%, 55% {
+                    opacity: 0.55;
+                    filter: drop-shadow(0 0 2px rgba(0,212,255,0.4));
+                  }
+                }
+                @keyframes cw-glow-pulse {
+                  0%, 100% { text-shadow: 0 0 6px rgba(0,229,255,0.9), 0 0 14px rgba(0,144,255,0.6); }
+                  50% { text-shadow: 0 0 10px rgba(0,229,255,1), 0 0 24px rgba(0,144,255,0.95), 0 0 40px rgba(0,144,255,0.6); }
+                }
+                @keyframes cw-box-pulse {
+                  0%, 100% { box-shadow: 0 0 6px rgba(0,212,255,0.5); }
+                  50% { box-shadow: 0 0 16px rgba(0,229,255,0.95), 0 0 28px rgba(0,144,255,0.6); }
+                }
+                @keyframes cw-spark {
+                  0%, 100% { opacity: 0.35; transform: scaleX(0.55); }
+                  50% { opacity: 1; transform: scaleX(1); }
+                }
+                .cw-bolt { animation: cw-bolt-flicker 4.5s infinite; }
+                .cw-pulse { animation: cw-glow-pulse 2.2s ease-in-out infinite; }
+                .cw-box { animation: cw-box-pulse 2.2s ease-in-out infinite; }
+                .cw-spark { animation: cw-spark 2.2s ease-in-out infinite; box-shadow: 0 0 8px rgba(0,229,255,0.9); }
+                @media (prefers-reduced-motion: reduce) {
+                  .cw-bolt, .cw-pulse, .cw-box, .cw-spark { animation: none; }
+                }
+              `}</style>
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs sm:text-sm font-extrabold tracking-wider uppercase bg-gradient-to-r from-cyan-400 via-sky-200 to-fuchsia-400 bg-clip-text text-transparent group-hover:drop-shadow-[0_0_12px_rgba(6,182,212,0.65)] transition-all duration-300">
+                <span className="cw-bolt font-mono text-sm sm:text-base font-extrabold tracking-wider uppercase bg-gradient-to-r from-[#e6fbff] via-[#00d4ff] to-[#0090ff] bg-clip-text text-transparent">
                   Cognitive Workspace
                 </span>
-                <span className="hidden sm:inline-block text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300">
-                  CW
-                </span>
+                
               </div>
-              <span className="hidden sm:inline-block text-[8px] font-mono tracking-[0.2em] text-zinc-400 uppercase -mt-0.5">
-                THINK &bull; PLAN &bull; CREATE
-              </span>
+              <div className="cw-spark hidden sm:block h-px w-full my-0.5 bg-gradient-to-r from-transparent via-[#00e5ff] to-transparent" />
+              
             </div>
           </Link>
 

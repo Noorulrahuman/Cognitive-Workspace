@@ -166,10 +166,7 @@ export default function CognitiveLogo({
           </div>
         </div>
 
-        {/* Live Neon Status Indicator Dot for Small sizes */}
-        {size === "sm" && (
-          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-cyan-400 border border-zinc-950 animate-ping" />
-        )}
+        
       </div>
 
       {/* ===== 2. CW IDENTIFIER & TYPOGRAPHY (WHEN VARIANT IS FULL OR SHOWING CW PILL) ===== */}

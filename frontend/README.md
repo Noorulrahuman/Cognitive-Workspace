@@ -130,3 +130,11 @@ Next.js (App Router), React, TypeScript, Tailwind CSS, Supabase Auth.
 
 - RLS policies (`auth.uid() = user_id`) are the database owner's task.
 
+## Navbar Logo Update 
+
+- "Cognitive Workspace" title now has a lightning-blue glow with a soft flicker.
+- Added a thin glowing spark line under the title.
+- Removed the CW badge, the "THINK • PLAN • CREATE" tagline and the blinking dot.
+
+Files: `frontend/components/Navbar.tsx`, `frontend/components/CognitiveLogo.tsx`
+
