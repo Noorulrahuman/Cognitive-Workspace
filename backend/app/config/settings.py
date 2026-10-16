@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # Application Config
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
 
+    FRONTEND_URL: str = "http://localhost:3000"
+    
     # Required: app fails fast at startup if missing
     DATABASE_URL: SecretStr | None = None
 
