@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { name: "Overview", href: "/" },
   { name: "Projects", href: "/projects" },
   { name: "Members", href: "/members" },
+  { name: "Inbox", href: "/inbox" },
   { name: "Gemini", href: "/chat" },
 ];
 
@@ -93,6 +94,34 @@ function useBackendStatus(intervalMs = 15000): BackendStatus {
 
   return status;
 }
+function useInboxUnread(): number {
+  const [count, setCount] = useState<number>(0);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        const saved = localStorage.getItem("cognitive_inbox");
+        const parsed = saved ? JSON.parse(saved) : [];
+        setCount(
+          Array.isArray(parsed)
+            ? parsed.filter((i: { read?: boolean }) => !i.read).length
+            : 0
+        );
+      } catch {
+        setCount(0);
+      }
+    };
+    read();
+    window.addEventListener("cognitive-inbox-change", read);
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener("cognitive-inbox-change", read);
+      window.removeEventListener("storage", read);
+    };
+  }, []);
+
+  return count;
+}
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -100,6 +129,7 @@ export default function Navbar() {
   const { user, signOut, isLoading: authLoading } = useAuth();
   const { accentColor } = useAccent();
   const backendStatus = useBackendStatus();
+  const inboxUnread = useInboxUnread();
   const statusStyle = STATUS_STYLES[backendStatus];
 
   // Bundled menu state
@@ -220,7 +250,13 @@ export default function Navbar() {
                   }`}
                 >
                   {item.name}
+                  {item.href === "/inbox" && inboxUnread > 0 && (
+                    <span className="ml-1.5 rounded-full bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                      {inboxUnread}
+                    </span>
+                  )}
                 </Link>
+                
               );
             })}
           </nav>
