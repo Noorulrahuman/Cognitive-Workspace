@@ -138,3 +138,13 @@ Next.js (App Router), React, TypeScript, Tailwind CSS, Supabase Auth.
 
 Files: `frontend/components/Navbar.tsx`, `frontend/components/CognitiveLogo.tsx`
 
+## Inbox 
+
+- New `/inbox` page with Notifications, Messages and My Tasks tabs.
+- Unread dot, mark as read, mark all read, delete, and a new message form.
+- My Tasks shows the tasks of the selected member (pick the member in "Viewing as"); each task opens its project tasks page.
+- Navbar shows an unread count badge next to Inbox.
+- **Inbox items are saved in the browser for now (no database yet).
+
+Files: `frontend/app/inbox/page.tsx`, `frontend/app/inbox/MyTasks.tsx`, `frontend/components/Navbar.tsx`
+
