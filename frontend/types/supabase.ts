@@ -54,10 +54,58 @@ export interface Database {
           }
         ];
       };
+      stories: {
+        Row: {
+          id: string;
+          project_id: string;
+          title: string;
+          description: string | null;
+          priority: TaskPriority;
+          status: "open" | "in_progress" | "review" | "completed";
+          due_date: string | null;
+          progress: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          title: string;
+          description?: string | null;
+          priority?: TaskPriority;
+          status?: "open" | "in_progress" | "review" | "completed";
+          due_date?: string | null;
+          progress?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          title?: string;
+          description?: string | null;
+          priority?: TaskPriority;
+          status?: "open" | "in_progress" | "review" | "completed";
+          due_date?: string | null;
+          progress?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "stories_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: false;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       tasks: {
         Row: {
           id: string;
           project_id: string;
+          story_id?: string | null;
           user_id?: string | null;
           title: string;
           description: string | null;

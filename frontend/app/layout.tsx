@@ -19,10 +19,12 @@ export const metadata: Metadata = {
   title: "Cognitive Workspace",
   description: "AI-augmented workspace with agent orchestration and semantic retrieval",
   icons: {
-    icon: "/logo.jpg",
-    apple: "/logo.jpg",
+    icon: "/golden-owl-logo.png",
+    apple: "/golden-owl-logo.png",
   },
 };
+
+import { UserAvatarProvider } from "@/components/UserAvatarProvider";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -33,8 +35,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-100 selection:bg-[var(--accent-color)] selection:text-white">
         <AccentColorProvider>
           <AuthProvider>
-            <Navbar />
-            <div className="flex-1 flex flex-col">{children}</div>
+            <UserAvatarProvider>
+              <Navbar />
+              <div className="flex-1 flex flex-col">{children}</div>
+            </UserAvatarProvider>
           </AuthProvider>
         </AccentColorProvider>
       </body>

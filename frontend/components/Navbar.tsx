@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useAccent } from "@/components/AccentColorProvider";
+import { useUserAvatar } from "@/components/UserAvatarProvider";
+import { CuteOwlAvatar } from "@/components/CuteOwlAvatar";
 import CognitiveLogo from "@/components/CognitiveLogo";
 import BackendStatus from "@/components/BackendStatus";
 
@@ -90,7 +92,7 @@ function useBackendStatus(intervalMs = 15000): BackendStatus {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [intervalMs]);
+  }, []);
 
   return status;
 }
@@ -127,7 +129,9 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, signOut, isLoading: authLoading } = useAuth();
-  const { accentColor } = useAccent();
+  const { accentColor, setAccentColor, presets, activePreset } = useAccent();
+  const { avatarId } = useUserAvatar();
+  const [customHexInput, setCustomHexInput] = useState<string>("");
   const backendStatus = useBackendStatus();
   const inboxUnread = useInboxUnread();
   const statusStyle = STATUS_STYLES[backendStatus];
@@ -180,49 +184,11 @@ export default function Navbar() {
       <div className="mx-auto flex max-w-7xl items-center justify-between">
         {/* ===== LEFT: Brand + Main Links ===== */}
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-3 group">
-            <CognitiveLogo size="sm" variant="icon" animated={true} />
-            <div className="flex flex-col">
-              <style>{`
-                @keyframes cw-bolt-flicker {
-                  0%, 18%, 22%, 25%, 53%, 57%, 100% {
-                    opacity: 1;
-                    filter: drop-shadow(0 0 6px rgba(0,212,255,0.95)) drop-shadow(0 0 16px rgba(0,144,255,0.75));
-                  }
-                  20%, 24%, 55% {
-                    opacity: 0.55;
-                    filter: drop-shadow(0 0 2px rgba(0,212,255,0.4));
-                  }
-                }
-                @keyframes cw-glow-pulse {
-                  0%, 100% { text-shadow: 0 0 6px rgba(0,229,255,0.9), 0 0 14px rgba(0,144,255,0.6); }
-                  50% { text-shadow: 0 0 10px rgba(0,229,255,1), 0 0 24px rgba(0,144,255,0.95), 0 0 40px rgba(0,144,255,0.6); }
-                }
-                @keyframes cw-box-pulse {
-                  0%, 100% { box-shadow: 0 0 6px rgba(0,212,255,0.5); }
-                  50% { box-shadow: 0 0 16px rgba(0,229,255,0.95), 0 0 28px rgba(0,144,255,0.6); }
-                }
-                @keyframes cw-spark {
-                  0%, 100% { opacity: 0.35; transform: scaleX(0.55); }
-                  50% { opacity: 1; transform: scaleX(1); }
-                }
-                .cw-bolt { animation: cw-bolt-flicker 4.5s infinite; }
-                .cw-pulse { animation: cw-glow-pulse 2.2s ease-in-out infinite; }
-                .cw-box { animation: cw-box-pulse 2.2s ease-in-out infinite; }
-                .cw-spark { animation: cw-spark 2.2s ease-in-out infinite; box-shadow: 0 0 8px rgba(0,229,255,0.9); }
-                @media (prefers-reduced-motion: reduce) {
-                  .cw-bolt, .cw-pulse, .cw-box, .cw-spark { animation: none; }
-                }
-              `}</style>
-              <div className="flex items-center gap-1.5">
-                <span className="cw-bolt font-mono text-sm sm:text-base font-extrabold tracking-wider uppercase bg-gradient-to-r from-[#e6fbff] via-[#00d4ff] to-[#0090ff] bg-clip-text text-transparent">
-                  Cognitive Workspace
-                </span>
-                
-              </div>
-              <div className="cw-spark hidden sm:block h-px w-full my-0.5 bg-gradient-to-r from-transparent via-[#00e5ff] to-transparent" />
-              
-            </div>
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <CognitiveLogo size="sm" variant="icon" />
+            <span className="font-mono text-sm sm:text-base font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] group-hover:drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] transition-all duration-300">
+              Cognitive Workspace
+            </span>
           </Link>
 
           {/* Desktop Links */}
@@ -301,11 +267,9 @@ export default function Navbar() {
             {/* 2. User Profile on normal */}
             <div className="flex items-center gap-2">
               <div className="relative">
-                <div className="h-7 w-7 rounded-full bg-linear-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-[11px] font-bold text-white shadow-xs">
-                  {user ? getInitials(userDisplayName) : "CW"}
-                </div>
+                <CuteOwlAvatar owlId={avatarId} size="xs" />
                 <span
-                  className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 ${
+                  className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-zinc-950 ${
                     user ? "bg-emerald-400" : "bg-zinc-500"
                   }`}
                 />
@@ -334,9 +298,7 @@ export default function Navbar() {
             <div className="absolute right-0 mt-2.5 w-84 sm:w-96 rounded-2xl border border-zinc-800 bg-zinc-900/95 backdrop-blur-xl p-4 shadow-2xl z-50 animate-scale-up text-zinc-100">
               {/* Header: User Profile Info */}
               <div className="flex items-start gap-3 pb-3 border-b border-zinc-800/80">
-                <div className="h-11 w-11 rounded-full bg-linear-to-tr from-indigo-600 via-purple-600 to-amber-500 flex items-center justify-center text-sm font-bold text-white shadow-md">
-                  {user ? getInitials(userDisplayName) : "CW"}
-                </div>
+                <CuteOwlAvatar owlId={avatarId} size="md" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-bold text-white truncate">
@@ -372,6 +334,99 @@ export default function Navbar() {
                   </Link>
                 </div>
               )}
+
+              {/* ===== ACCENT COLOR PALETTE MENU (Moved directly out of Account Settings) ===== */}
+              <div className="mt-3.5 pt-3 border-t border-zinc-800/80">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full transition-colors"
+                      style={{
+                        backgroundColor: "var(--accent-color)",
+                        boxShadow: "0 0 8px var(--accent-glow)",
+                      }}
+                    />
+                    <span className="text-[11px] font-bold text-zinc-200 tracking-wide uppercase">
+                      Workspace Accent
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    {activePreset ? activePreset.name : "Custom"}
+                  </span>
+                </div>
+
+                {/* Preset color swatches (Instant activation on click) */}
+                <div className="grid grid-cols-7 gap-1.5 p-1 rounded-xl bg-zinc-950/60 border border-zinc-800">
+                  {presets.map((preset) => {
+                    const isSelected = accentColor.toLowerCase() === preset.hex.toLowerCase();
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setAccentColor(preset.hex);
+                          setCustomHexInput("");
+                        }}
+                        title={`${preset.name} (${preset.hex})`}
+                        className={`h-7 w-full rounded-lg transition-transform flex items-center justify-center relative cursor-pointer ${
+                          isSelected ? "scale-110 ring-2 ring-white" : "hover:scale-105 opacity-80 hover:opacity-100"
+                        }`}
+                        style={{
+                          backgroundColor: preset.hex,
+                          boxShadow: isSelected ? `0 0 12px ${preset.hex}` : undefined,
+                        }}
+                      >
+                        {isSelected && (
+                          <svg className="w-3.5 h-3.5 text-black drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Instant Color Swatch & Hex Input (No Apply button needed) */}
+                <div className="mt-2.5 flex items-center justify-between gap-2 p-1.5 rounded-xl border border-zinc-800 bg-zinc-950/70">
+                  <label className="text-[11px] font-mono text-zinc-400 flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="color"
+                      value={accentColor.startsWith("#") ? accentColor : "#f59e0b"}
+                      onChange={(e) => setAccentColor(e.target.value)}
+                      className="w-5 h-5 rounded-md border border-zinc-700 bg-transparent cursor-pointer p-0"
+                      title="Direct color swatch picker"
+                    />
+                    <span className="text-[10px]">Picker</span>
+                  </label>
+
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={customHexInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomHexInput(val);
+                        if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(val.trim())) {
+                          setAccentColor(val.trim());
+                        }
+                      }}
+                      placeholder={accentColor}
+                      className="w-20 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[11px] font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-[var(--accent-color)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccentColor("#f59e0b");
+                        setCustomHexInput("");
+                      }}
+                      title="Reset to Imperial Gold default"
+                      className="px-2 py-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-[10px] font-mono transition cursor-pointer"
+                    >
+                      Gold
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <BackendStatus /> 
 

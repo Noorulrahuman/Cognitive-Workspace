@@ -3,13 +3,13 @@
 :root {
   --background: #09090b;
   --foreground: #ededed;
-  --accent-color: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-subtle: rgba(99, 102, 241, 0.15);
-  --accent-border: rgba(99, 102, 241, 0.35);
-  --accent-glow: rgba(99, 102, 241, 0.35);
-  --accent-ring: rgba(99, 102, 241, 0.5);
-  --accent-text: #a5b4fc;
+  --accent-color: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-subtle: rgba(245, 158, 11, 0.16);
+  --accent-border: rgba(245, 158, 11, 0.35);
+  --accent-glow: rgba(245, 158, 11, 0.45);
+  --accent-ring: rgba(245, 158, 11, 0.55);
+  --accent-text: #fde68a;
   color-scheme: dark;
 }
 
@@ -36,10 +36,37 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Visible focus ring using the dynamic accent color */
-:focus-visible {
+/* Visible focus ring using the dynamic accent color for non-input interactive elements */
+:focus-visible:not(input):not(textarea):not(select) {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
+}
+
+/* Single crisp thin border on all dialogue/input bars when focused */
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  outline: none !important;
+  outline-offset: 0 !important;
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible,
+[contenteditable="true"]:focus,
+[contenteditable="true"]:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: var(--accent-color, #f59e0b) !important;
 }
 
 /* ---------- Animations (used by toasts and modals on the Projects page) ---------- */
@@ -218,4 +245,72 @@ html {
 .animate-neon-aurora {
   animation: neon-aurora 14s linear infinite;
 }
+
+/* ---------- Golden Animated Hue & Glowing Owl Keyframes ---------- */
+@keyframes golden-hue-shift {
+  0% {
+    filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.7)) drop-shadow(0 0 24px rgba(217, 119, 6, 0.4)) hue-rotate(0deg);
+  }
+  33% {
+    filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.95)) drop-shadow(0 0 32px rgba(245, 158, 11, 0.6)) hue-rotate(12deg);
+  }
+  66% {
+    filter: drop-shadow(0 0 20px rgba(234, 179, 8, 1)) drop-shadow(0 0 40px rgba(251, 191, 36, 0.75)) hue-rotate(-8deg);
+  }
+  100% {
+    filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.7)) drop-shadow(0 0 24px rgba(217, 119, 6, 0.4)) hue-rotate(0deg);
+  }
+}
+
+@keyframes golden-ring-pulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.5), inset 0 0 8px rgba(251, 191, 36, 0.3);
+    border-color: rgba(245, 158, 11, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(251, 191, 36, 0.95), 0 0 45px rgba(245, 158, 11, 0.4), inset 0 0 16px rgba(251, 191, 36, 0.6);
+    border-color: rgba(251, 191, 36, 1);
+  }
+}
+
+@keyframes owl-breathe {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50%      { transform: translateY(-4px) scale(1.03); }
+}
+
+@keyframes owl-buffering-spin {
+  0%   { transform: rotate(0deg); stroke-dashoffset: 140; }
+  50%  { stroke-dashoffset: 40; }
+  100% { transform: rotate(360deg); stroke-dashoffset: 140; }
+}
+
+@keyframes owl-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.1); }
+}
+
+.animate-golden-hue     { animation: golden-hue-shift 4.5s ease-in-out infinite; }
+.animate-golden-ring    { animation: golden-ring-pulse 3s ease-in-out infinite; }
+.animate-owl-breathe    { animation: owl-breathe 3.5s ease-in-out infinite; }
+.animate-owl-buffer     { animation: owl-buffering-spin 2s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+.animate-owl-blink      { animation: owl-blink 4s infinite; }
+
+/* Animated Logo Illumination without black background */
+@keyframes logo-illumination {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px var(--accent-glow, rgba(245, 158, 11, 0.6)))
+            drop-shadow(0 0 20px var(--accent-glow, rgba(245, 158, 11, 0.35)));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 18px var(--accent-color, #fbbf24))
+            drop-shadow(0 0 38px var(--accent-glow, rgba(245, 158, 11, 0.85)));
+    transform: scale(1.035);
+  }
+}
+
+.animate-illumination {
+  animation: logo-illumination 3.6s ease-in-out infinite;
+}
+
 
