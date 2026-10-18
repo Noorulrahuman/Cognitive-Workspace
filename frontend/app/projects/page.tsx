@@ -5,18 +5,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
-import { listProjects, createProject, updateProject, deleteProject } from "./actions";import {
+import { listProjects, createProject, updateProject, deleteProject } from "./actions";
+import {
+  Story,
   Task,
   TaskStage,
   TaskPriority,
   Member,
+  SystemRole,
+  isDefaultAdmin,
   STAGE_CONFIG,
   PRIORITY_CONFIG,
   fetchWorkspaceTasks,
   fetchWorkspaceMembers,
+  fetchWorkspaceStories,
+  computeProjectProgress,
   createWorkspaceTask,
   updateWorkspaceTask,
 } from "@/utils/workspaceData";
+import OwlLoader from "@/components/OwlLoader";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -280,8 +287,29 @@ export default function ProjectsPage() {
   const router = useRouter();
 
   const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
+  const [stories, setStories] = useState<Story[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+
+  // Derive current user member & role permissions
+  const currentUserMember = useMemo(() => {
+    if (user?.email) {
+      return (
+        members.find(
+          (m) =>
+            (m.email && m.email.toLowerCase() === user.email?.toLowerCase()) ||
+            m.id === user.id
+        ) || null
+      );
+    }
+    return members.find((m) => isDefaultAdmin(m.name, m.email)) || members[0] || null;
+  }, [user, members]);
+
+  const currentUserRole: SystemRole = (currentUserMember?.system_role as SystemRole) || "Admin";
+  const canCreateProject = currentUserRole === "Admin" || currentUserRole === "Manager";
+  const canEditProject = currentUserRole === "Admin" || currentUserRole === "Manager";
+  const canDeleteProject = currentUserRole === "Admin" || currentUserRole === "Manager";
+  const isViewer = currentUserRole === "Viewer";
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -365,11 +393,13 @@ export default function ProjectsPage() {
   const loadWorkspaceData = useCallback(async () => {
     setLoading(true);
 
-    // Load tasks & members in parallel
-    const [tasksData, membersData] = await Promise.all([
+    // Load stories, tasks & members in parallel
+    const [storiesData, tasksData, membersData] = await Promise.all([
+      fetchWorkspaceStories(supabase),
       fetchWorkspaceTasks(supabase),
       fetchWorkspaceMembers(supabase),
     ]);
+    setStories(storiesData);
     setTasks(tasksData);
     setMembers(membersData);
 
@@ -967,15 +997,25 @@ export default function ProjectsPage() {
             <option value="name">Name A-Z</option>
             <option value="docs">Most documents</option>
           </select>
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>New Project</span>
-          </button>
+          {canCreateProject ? (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>New Project</span>
+            </button>
+          ) : (
+            <div
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-800 bg-zinc-900/60 text-[11px] font-mono text-zinc-400"
+              title="Only Workspace Admins and Managers can add new projects."
+            >
+              <span>🔒</span>
+              <span>Admins & Managers Only</span>
+            </div>
+          )}
         </div>
       </div>
       {/* NEW: stats row */}
@@ -1048,9 +1088,12 @@ export default function ProjectsPage() {
       {/* Project Cards Grid */}
       <div className="mt-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-            <div className="h-8 w-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
-            <p className="mt-3 text-xs font-mono">Loading your projects...</p>
+          <div className="flex flex-col items-center justify-center py-16">
+            <OwlLoader
+              size="md"
+              text="Buffering Project Workspaces..."
+              subtext="Syncing hierarchical stories, tasks, and member pipelines"
+            />
           </div>
         ) : filteredProjects.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-800 p-12 text-center">
@@ -1060,7 +1103,7 @@ export default function ProjectsPage() {
                 ? "Try a different search or filter."
                 : "Create your first project to get started."}
             </p>
-            {!searchQuery && selectedCategory === "All" && (
+            {!searchQuery && selectedCategory === "All" && canCreateProject && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
                 className="mt-4 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white cursor-pointer"
@@ -1078,23 +1121,22 @@ export default function ProjectsPage() {
             }
           >
             {sortedProjects.map((project) => {
+              const projectStories = stories.filter((s) => s.project_id === project.id);
               const projectTasks = projectTasksMap[project.name] || projectTasksMap[project.id] || [];
               const inProgressCount = projectTasks.filter((t) => t.stage === "in_progress").length;
-              // NEW: how many tasks of this project are finished
               const doneCount = projectTasks.filter((t) => t.stage === "done").length;
-              // NEW: the people working on this project (shown as small avatars on the card)
               const projectTeam = getProjectTeam(project, members, projectTasks);
-              const progressPercent =
-                projectTasks.length === 0
-                  ? 0
-                  : Math.round((doneCount / projectTasks.length) * 100);
+              
+              // Project progress bar based on BOTH stories and tasks!
+              const progressData = computeProjectProgress(project.id, projectStories, projectTasks);
+              const progressPercent = progressData.progress;
 
               return (
                 <div
                   key={project.id}
-                  onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}/tasks`)}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-5 hover:border-indigo-500/50 hover:bg-zinc-900/80 transition-all shadow-md cursor-pointer"
-                  title="Click to open project tasks workspace"
+                  onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}/stories`)}
+                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-5 hover:border-amber-500/50 hover:bg-zinc-900/80 transition-all shadow-md cursor-pointer"
+                  title="Click to open project stories & tasks workspace"
                 >
                   <div>
                     {/* Top row: Icon + Category + Info button */}
@@ -1107,7 +1149,7 @@ export default function ProjectsPage() {
                         {getProjectInitial(project.name)}
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+                        <span className="inline-block rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-amber-300">
                           {project.category}
                         </span>
                         <button
@@ -1126,7 +1168,7 @@ export default function ProjectsPage() {
                     </div>
 
                     {/* Title & Description */}
-                    <h2 className="mt-4 text-base font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1">
+                    <h2 className="mt-4 text-base font-bold text-white group-hover:text-amber-400 transition-colors line-clamp-1">
                       {project.name}
                     </h2>
                     <p className="mt-1.5 text-xs text-zinc-400 line-clamp-2 leading-relaxed">
@@ -1143,8 +1185,16 @@ export default function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Tasks pill on Card */}
-                    <div className="mt-3.5 flex items-center gap-2">
+                    {/* Stories & Tasks pills on Card */}
+                    <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/projects/${encodeURIComponent(project.id)}/stories`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/25 text-[11px] font-mono text-amber-300 transition"
+                      >
+                        <span>📖 {projectStories.length} {projectStories.length === 1 ? "story" : "stories"}</span>
+                        <span>&rarr;</span>
+                      </Link>
                       <Link
                         href={`/projects/${encodeURIComponent(project.id)}/tasks`}
                         onClick={(e) => e.stopPropagation()}
@@ -1154,18 +1204,17 @@ export default function ProjectsPage() {
                         {inProgressCount > 0 && (
                           <span className="text-[10px] text-amber-300">({inProgressCount} active)</span>
                         )}
-                        <span>&rarr;</span>
                       </Link>
                     </div>
 
-                    {/* NEW: progress bar (finished tasks / all tasks of this project) */}
+                    {/* DUAL PROGRESS BAR (BASED ON BOTH STORIES AND TASKS) */}
                     <div className="mt-3.5">
                       <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                        <span>Progress</span>
-                        <span className={progressPercent === 100 ? "text-emerald-400" : "text-zinc-400"}>
-                          {projectTasks.length === 0
-                            ? "No tasks yet"
-                            : `${doneCount}/${projectTasks.length} done (${progressPercent}%)`}
+                        <span>Stories & Tasks Progress</span>
+                        <span className={progressPercent === 100 ? "text-emerald-400 font-bold" : "text-amber-300 font-semibold"}>
+                          {projectStories.length === 0 && projectTasks.length === 0
+                            ? "No backlog"
+                            : `${progressPercent}%`}
                         </span>
                       </div>
                       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
@@ -1173,7 +1222,7 @@ export default function ProjectsPage() {
                           className={`h-full rounded-full transition-all duration-500 ${
                             progressPercent === 100
                               ? "bg-emerald-400"
-                              : "bg-linear-to-r from-indigo-500 to-sky-400"
+                              : "bg-linear-to-r from-amber-500 to-yellow-400"
                           }`}
                           style={{ width: `${progressPercent}%` }}
                         />
@@ -1254,33 +1303,37 @@ export default function ProjectsPage() {
                         Gemini &rarr;
                       </Link>
 
-                      {/* Edit Project Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(project);
-                        }}
-                        className="p-1 rounded text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/40 transition cursor-pointer"
-                        title="Edit Project"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
+                      {/* Edit Project Button (Admins & Managers Only) */}
+                      {canEditProject && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(project);
+                          }}
+                          className="p-1 rounded text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/40 transition cursor-pointer"
+                          title="Edit Project"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                      )}
 
-                      {/* Remove Project Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setProjectToDelete(project);
-                        }}
-                        className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
-                        title="Remove Project"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      {/* Remove Project Button (Admins & Managers Only) */}
+                      {canDeleteProject && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProjectToDelete(project);
+                          }}
+                          className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 transition cursor-pointer"
+                          title="Remove Project"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1360,12 +1413,18 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setIsInlineAddTaskOpen(!isInlineAddTaskOpen)}
-                    className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white text-xs font-semibold transition cursor-pointer"
-                  >
-                    {isInlineAddTaskOpen ? "Close Form" : "+ Add Task"}
-                  </button>
+                  {!isViewer ? (
+                    <button
+                      onClick={() => setIsInlineAddTaskOpen(!isInlineAddTaskOpen)}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white text-xs font-semibold transition cursor-pointer"
+                    >
+                      {isInlineAddTaskOpen ? "Close Form" : "+ Add Task"}
+                    </button>
+                  ) : (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-800 text-zinc-400">
+                      👁️ Viewer Mode
+                    </span>
+                  )}
                   <Link
                     href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
                     className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
@@ -1517,13 +1576,19 @@ export default function ProjectsPage() {
 
                         {/* Stage Badge & Advance */}
                         <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={() => handleAdvanceTaskStage(task)}
-                            title="Click to advance stage"
-                            className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono font-medium transition cursor-pointer hover:scale-105 ${stageConf.badge}`}
-                          >
-                            {stageConf.label} &rarr;
-                          </button>
+                          {!isViewer ? (
+                            <button
+                              onClick={() => handleAdvanceTaskStage(task)}
+                              title="Click to advance stage"
+                              className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono font-medium transition cursor-pointer hover:scale-105 ${stageConf.badge}`}
+                            >
+                              {stageConf.label} &rarr;
+                            </button>
+                          ) : (
+                            <span className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono font-medium ${stageConf.badge}`}>
+                              {stageConf.label}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

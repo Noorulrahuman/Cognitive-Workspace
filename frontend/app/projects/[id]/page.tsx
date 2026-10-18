@@ -6,5 +6,5 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  redirect(`/projects/${encodeURIComponent(id)}/tasks`);
+  redirect(`/projects/${encodeURIComponent(id)}/stories`);
 }

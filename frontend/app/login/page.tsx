@@ -1,92 +1,44 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/client";
-import { useAuth } from "@/components/AuthProvider";
 import CognitiveLogo from "@/components/CognitiveLogo";
+import OwlLoader from "@/components/OwlLoader";
+import { useAccent } from "@/components/AccentColorProvider";
+import { createClient } from "@/utils/supabase/client";
 
-function calculatePasswordStrength(pass: string): {
-  score: number;
-  label: string;
-  hasLength: boolean;
-  hasNumber: boolean;
-  hasUpper: boolean;
-  hasSpecial: boolean;
-} {
-  const hasLength = pass.length >= 8;
-  const hasNumber = /\d/.test(pass);
-  const hasUpper = /[A-Z]/.test(pass);
-  const hasSpecial = /[^A-Za-z0-9]/.test(pass);
-
-  let score = 0;
-  if (hasLength) score += 1;
-  if (hasNumber) score += 1;
-  if (hasUpper) score += 1;
-  if (hasSpecial) score += 1;
-
-  let label = "Weak";
-  if (score >= 4) label = "Very Strong";
-  else if (score === 3) label = "Strong";
-  else if (score === 2) label = "Moderate";
-
-  return { score, label, hasLength, hasNumber, hasUpper, hasSpecial };
-}
+export const dynamic = "force-dynamic";
 
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") === "register" ? "register" : "login";
-
-  const { user } = useAuth();
+  const nextUrl = searchParams.get("next") || "/projects";
+  const { accentColor } = useAccent();
   const supabase = createClient();
 
-  const [activeTab, setActiveTab] = useState<"login" | "register">(initialTab);
-  const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<"login" | "register">("login");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Sign In Form State
-  const [loginEmail, setLoginEmail] = useState<string>("");
-  const [loginPassword, setLoginPassword] = useState<string>("");
+  // Sign In inputs
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
 
-  // Register Form State
-  const [registerName, setRegisterName] = useState<string>("");
-  const [registerEmail, setRegisterEmail] = useState<string>("");
-  const [registerPassword, setRegisterPassword] = useState<string>("");
-  const [registerConfirmPassword, setRegisterConfirmPassword] = useState<string>("");
+  // Sign Up inputs
+  const [registerName, setRegisterName] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
 
-  // Forgot Password Modal
-  const [isForgotModalOpen, setIsForgotModalOpen] = useState<boolean>(false);
-  const [forgotEmail, setForgotEmail] = useState<string>("");
-  const [forgotLoading, setForgotLoading] = useState<boolean>(false);
+  // Forgot Password modal
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
 
-  // If already logged in, redirect to projects
-  useEffect(() => {
-    if (user) {
-      router.push("/projects");
-    }
-  }, [user, router]);
-
-    // FIX: keep the visible tab in sync with the URL.q
-  // Problem before: clicking "Register" in the navbar while already on /login
-  // changed the URL to /login?tab=register, but the page was not re-created,
-  // and useState only reads the URL once, so the Sign In form stayed on screen.
-  // Now, whenever the URL's ?tab= value changes, we switch the tab to match.
-  useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
-
-  const passwordStrength = calculatePasswordStrength(registerPassword);
-  const passwordsMatch =
-    registerPassword.length > 0 &&
-    registerConfirmPassword.length > 0 &&
-    registerPassword === registerConfirmPassword;
-
-  // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -101,38 +53,33 @@ function LoginContent() {
 
       if (error) {
         setErrorMessage(error.message);
-        setLoading(false);
         return;
       }
 
-      if (data.user) {
-        setSuccessMessage("Authentication successful! Redirecting to workspace...");
-        setTimeout(() => {
-          router.push("/projects");
-          router.refresh();
-        }, 800);
+      if (data?.user) {
+        router.push(nextUrl);
+        router.refresh();
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      const msg = err instanceof Error ? err.message : "Authentication failed";
       setErrorMessage(msg);
+    } finally {
       setLoading(false);
     }
   };
 
-  // Handle Register Submit
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
     if (registerPassword !== registerConfirmPassword) {
-      setErrorMessage("Passwords do not match. Please verify.");
+      setErrorMessage("Passwords do not match");
       return;
     }
-    // FIX: the message says "at least 8 characters", so also require the length check.
-    // Before, a short password like "ab1!" could pass because only the score was checked.
-    if (!passwordStrength.hasLength || passwordStrength.score < 2) {
-      setErrorMessage("Please choose a stronger password with at least 8 characters.");
+
+    if (registerPassword.length < 8) {
+      setErrorMessage("Password must be at least 8 characters long");
       return;
     }
 
@@ -151,93 +98,70 @@ function LoginContent() {
 
       if (error) {
         setErrorMessage(error.message);
-        setLoading(false);
         return;
       }
 
-      if (data.user) {
-        // Supabase sends a confirmation email if configured, or signs in directly
+      if (data?.user) {
         if (data.session) {
-          setSuccessMessage("Account created and logged in! Redirecting...");
-          setTimeout(() => {
-            router.push("/projects");
-            router.refresh();
-          }, 800);
+          router.push(nextUrl);
+          router.refresh();
         } else {
           setSuccessMessage(
-            "Account registered successfully! A confirmation link has been sent to your email. You can also sign in right away if email verification is optional."
+            "Account created! Please check your email inbox to confirm your registration."
           );
-          setLoading(false);
         }
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to register user.";
+      const msg = err instanceof Error ? err.message : "Registration failed";
       setErrorMessage(msg);
+    } finally {
       setLoading(false);
     }
   };
 
-  // Handle Forgot Password
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail.trim()) return;
     setForgotLoading(true);
     setForgotSuccess(null);
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
-        redirectTo: `${window.location.origin}/auth/callback?next=/projects`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/settings`,
       });
+
       if (error) {
         setErrorMessage(error.message);
       } else {
-        setForgotSuccess(
-          `Password reset link dispatched to ${forgotEmail}. Please check your inbox.`
-        );
+        setForgotSuccess("Password reset email sent! Check your inbox.");
       }
-    } catch {
-      setErrorMessage("Could not request password reset.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send reset email";
+      setErrorMessage(msg);
     } finally {
       setForgotLoading(false);
     }
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 relative overflow-hidden">
-      {/* Background glowing gradients */}
-      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_center,var(--tw-gradient-stops))] from-indigo-950/30 via-zinc-950/0 to-transparent" />
-
-      <div className="w-full max-w-md relative z-10">
+    <div className="flex-1 flex items-center justify-center py-12 px-4 sm:px-6 relative bg-black text-zinc-100">
+      <div className="w-full max-w-sm relative z-10">
         {/* Brand Header */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex flex-col items-center gap-2 mb-4 group">
-            <CognitiveLogo size="md" variant="icon" animated={true} />
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="font-mono text-sm font-extrabold tracking-wider uppercase bg-gradient-to-r from-cyan-400 via-sky-200 to-fuchsia-400 bg-clip-text text-transparent group-hover:drop-shadow-[0_0_12px_rgba(6,182,212,0.65)] transition-all duration-300">
-                Cognitive Workspace
-              </span>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-300">
-                CW
-              </span>
-            </div>
-            <span className="text-[9px] font-mono tracking-[0.2em] text-zinc-400 uppercase">
-              THINK &bull; PLAN &bull; CREATE
+        <div className="text-center mb-6">
+          <Link href="/" className="inline-flex flex-col items-center gap-2 mb-2 group">
+            <CognitiveLogo size="md" variant="icon" />
+            <span className="font-mono text-base font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] transition-all">
+              Cognitive Workspace
             </span>
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            {activeTab === "login" ? "Welcome back" : "Create your workspace account"}
-          </h1>
-          <p className="mt-1 text-xs text-zinc-400">
-            {activeTab === "login"
-              ? "Sign in to manage your autonomous agents and vector indexes."
-              : "Register to orchestrate multi-agent pipelines and ingest documents."}
+          <p className="text-xs text-zinc-400">
+            {activeTab === "login" ? "Sign in to your workspace" : "Create a workspace account"}
           </p>
         </div>
 
-        {/* Card Container */}
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/70 p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
-          {/* Tabs Switcher */}
-          <div className="grid grid-cols-2 p-1 rounded-xl bg-zinc-950 border border-zinc-800 mb-6">
+        {/* Minimal Black & Accent Card */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/90 p-6 backdrop-blur-xl shadow-2xl">
+          {/* Tab Switcher */}
+          <div className="grid grid-cols-2 p-1 rounded-xl bg-zinc-900/90 border border-zinc-800 mb-5 text-xs font-semibold">
             <button
               type="button"
               onClick={() => {
@@ -245,10 +169,15 @@ function LoginContent() {
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              style={
                 activeTab === "login"
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? { backgroundColor: "var(--accent-color)", color: "#000000" }
+                  : {}
+              }
+              className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeTab === "login"
+                  ? "font-bold shadow-sm"
+                  : "text-zinc-400 hover:text-white"
               }`}
             >
               Sign In
@@ -260,10 +189,15 @@ function LoginContent() {
                 setErrorMessage(null);
                 setSuccessMessage(null);
               }}
-              className={`py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              style={
                 activeTab === "register"
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "text-zinc-400 hover:text-zinc-200"
+                  ? { backgroundColor: "var(--accent-color)", color: "#000000" }
+                  : {}
+              }
+              className={`py-1.5 rounded-lg transition-all cursor-pointer ${
+                activeTab === "register"
+                  ? "font-bold shadow-sm"
+                  : "text-zinc-400 hover:text-white"
               }`}
             >
               Create Account
@@ -272,50 +206,54 @@ function LoginContent() {
 
           {/* Feedback Alerts */}
           {errorMessage && (
-            <div className="mb-5 p-3 rounded-xl border border-rose-500/40 bg-rose-950/30 text-rose-300 text-xs flex items-start gap-2.5">
-              <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+            <div className="mb-4 p-3 rounded-xl border border-red-500/40 bg-red-950/30 text-red-300 text-xs flex items-start gap-2">
+              <span className="font-bold">⚠</span>
               <span>{errorMessage}</span>
             </div>
           )}
 
           {successMessage && (
-            <div className="mb-5 p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/30 text-emerald-300 text-xs flex items-start gap-2.5">
-              <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+            <div
+              className="mb-4 p-3 rounded-xl border text-xs flex items-start gap-2"
+              style={{
+                borderColor: "var(--accent-border)",
+                backgroundColor: "var(--accent-subtle)",
+                color: "var(--accent-text)",
+              }}
+            >
+              <span className="font-bold">✓</span>
               <span>{successMessage}</span>
             </div>
           )}
 
-          {/* SIGN IN FORM */}
+          {/* SIGN IN FORM (Necessary bars only) */}
           {activeTab === "login" && (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <form onSubmit={handleLoginSubmit} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Email Address
                 </label>
                 <input
                   type="email"
                   required
                   autoComplete="email"
-                  placeholder="name@example.com"
+                  placeholder="name@company.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 transition-colors"
                 />
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-zinc-300">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-zinc-300">
                     Password
                   </label>
                   <button
                     type="button"
                     onClick={() => setIsForgotModalOpen(true)}
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                    style={{ color: "var(--accent-color)" }}
+                    className="text-[11px] hover:underline cursor-pointer"
                   >
                     Forgot password?
                   </button>
@@ -325,15 +263,15 @@ function LoginContent() {
                     type={showPassword ? "text" : "password"}
                     required
                     autoComplete="current-password"
-                    placeholder="Enter your password"
+                    placeholder="Enter password"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 pr-10 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2.5 pr-10 text-xs text-white placeholder-zinc-500 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                    className="absolute right-3 top-2.5 text-zinc-400 hover:text-white cursor-pointer"
                   >
                     {showPassword ? (
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -352,11 +290,15 @@ function LoginContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: "var(--accent-color)",
+                  boxShadow: "0 4px 14px var(--accent-glow)",
+                }}
+                className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold text-black transition-all hover:opacity-95 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    <span className="h-3 w-3 rounded-full border-2 border-black/30 border-t-black animate-spin" />
                     <span>Signing in...</span>
                   </>
                 ) : (
@@ -366,11 +308,11 @@ function LoginContent() {
             </form>
           )}
 
-          {/* REGISTRATION FORM */}
+          {/* CREATE ACCOUNT FORM (Necessary bars only) */}
           {activeTab === "register" && (
-            <form onSubmit={handleRegisterSubmit} className="space-y-4">
+            <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Full Name
                 </label>
                 <input
@@ -380,27 +322,27 @@ function LoginContent() {
                   placeholder="e.g. Subburaj K"
                   value={registerName}
                   onChange={(e) => setRegisterName(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Email Address
                 </label>
                 <input
                   type="email"
                   required
                   autoComplete="email"
-                  placeholder="name@example.com"
+                  placeholder="name@company.com"
                   value={registerEmail}
                   onChange={(e) => setRegisterEmail(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Password
                 </label>
                 <div className="relative">
@@ -408,15 +350,15 @@ function LoginContent() {
                     type={showPassword ? "text" : "password"}
                     required
                     autoComplete="new-password"
-                    placeholder="Create a secure password"
+                    placeholder="Create password (8+ chars)"
                     value={registerPassword}
                     onChange={(e) => setRegisterPassword(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 pr-10 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2.5 pr-10 text-xs text-white placeholder-zinc-500 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                    className="absolute right-3 top-2.5 text-zinc-400 hover:text-white cursor-pointer"
                   >
                     {showPassword ? (
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -430,115 +372,52 @@ function LoginContent() {
                     )}
                   </button>
                 </div>
-
-                {/* Password Strength Meter */}
-                {registerPassword.length > 0 && (
-                  <div className="mt-2.5 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
-                      <span className="text-zinc-400">Strength:</span>
-                      <span
-                        className={
-                          passwordStrength.score >= 3
-                            ? "text-emerald-400 font-semibold"
-                            : passwordStrength.score === 2
-                            ? "text-yellow-400"
-                            : "text-rose-400"
-                        }
-                      >
-                        {passwordStrength.label}
-                      </span>
-                    </div>
-
-                    <div className="h-1.5 w-full bg-zinc-950 rounded-full overflow-hidden flex gap-1">
-                      {[1, 2, 3, 4].map((step) => (
-                        <div
-                          key={step}
-                          className={`h-full flex-1 rounded-full transition-all ${
-                            step <= passwordStrength.score
-                              ? passwordStrength.score >= 3
-                                ? "bg-emerald-400"
-                                : passwordStrength.score === 2
-                                ? "bg-yellow-400"
-                                : "bg-rose-500"
-                              : "bg-zinc-800"
-                          }`}
-                        />
-                      ))}
-                    </div>
-
-                    {/* Check items */}
-                    <div className="grid grid-cols-2 gap-1 text-[10px] font-mono text-zinc-400 pt-1">
-                      <span className={passwordStrength.hasLength ? "text-emerald-400" : "text-zinc-500"}>
-                        {passwordStrength.hasLength ? "✓" : "○"} 8+ chars
-                      </span>
-                      <span className={passwordStrength.hasNumber ? "text-emerald-400" : "text-zinc-500"}>
-                        {passwordStrength.hasNumber ? "✓" : "○"} 1+ number
-                      </span>
-                      <span className={passwordStrength.hasUpper ? "text-emerald-400" : "text-zinc-500"}>
-                        {passwordStrength.hasUpper ? "✓" : "○"} 1+ uppercase
-                      </span>
-                      <span className={passwordStrength.hasSpecial ? "text-emerald-400" : "text-zinc-500"}>
-                        {passwordStrength.hasSpecial ? "✓" : "○"} 1+ special
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
                   Confirm Password
                 </label>
                 <input
                   type="password"
                   required
-                  placeholder="Repeat your password"
+                  placeholder="Repeat password"
                   value={registerConfirmPassword}
                   onChange={(e) => setRegisterConfirmPassword(e.target.value)}
-                  className={`w-full rounded-xl border bg-zinc-950 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors ${
-                    registerConfirmPassword.length > 0
-                      ? passwordsMatch
-                        ? "border-emerald-500/60 focus:border-emerald-500"
-                        : "border-rose-500/60 focus:border-rose-500"
-                      : "border-zinc-800 focus:border-indigo-500"
-                  }`}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 transition-colors"
                 />
-                {registerConfirmPassword.length > 0 && !passwordsMatch && (
-                  <p className="mt-1 text-[11px] text-rose-400">Passwords do not match</p>
+                {registerConfirmPassword.length > 0 && registerPassword !== registerConfirmPassword && (
+                  <p className="mt-1 text-[11px] text-red-400">Passwords do not match</p>
                 )}
               </div>
 
               <button
                 type="submit"
-                disabled={loading || (registerConfirmPassword.length > 0 && !passwordsMatch)}
-                className="w-full mt-2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold text-white shadow-lg shadow-indigo-600/30 transition-all cursor-pointer flex items-center justify-center gap-2"
+                disabled={loading || (registerConfirmPassword.length > 0 && registerPassword !== registerConfirmPassword)}
+                style={{
+                  backgroundColor: "var(--accent-color)",
+                  boxShadow: "0 4px 14px var(--accent-glow)",
+                }}
+                className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold text-black transition-all hover:opacity-95 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
               >
                 {loading ? (
                   <>
-                    <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                    <span>Creating account...</span>
+                    <span className="h-3 w-3 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+                    <span>Registering...</span>
                   </>
                 ) : (
-                  <span>Complete Registration &rarr;</span>
+                  <span>Create Account &rarr;</span>
                 )}
               </button>
             </form>
           )}
-
-          {/* Supabase Security Badge Footer */}
-          <div className="mt-6 pt-5 border-t border-zinc-800/80 text-center">
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-              <span>Secured by Supabase Auth & JWT</span>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* FORGOT PASSWORD MODAL */}
+      {/* Forgot Password Modal */}
       {isForgotModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h3 className="text-sm font-bold text-white">Reset Password</h3>
               <button
@@ -546,7 +425,7 @@ function LoginContent() {
                   setIsForgotModalOpen(false);
                   setForgotSuccess(null);
                 }}
-                className="text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                className="text-zinc-400 hover:text-white cursor-pointer"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -555,25 +434,32 @@ function LoginContent() {
             </div>
 
             {forgotSuccess ? (
-              <div className="mt-4 p-3 rounded-xl border border-emerald-500/40 bg-emerald-950/30 text-emerald-300 text-xs">
+              <div
+                className="mt-4 p-3 rounded-xl border text-xs"
+                style={{
+                  borderColor: "var(--accent-border)",
+                  backgroundColor: "var(--accent-subtle)",
+                  color: "var(--accent-text)",
+                }}
+              >
                 {forgotSuccess}
               </div>
             ) : (
-              <form onSubmit={handleForgotPassword} className="mt-4 space-y-4">
+              <form onSubmit={handleForgotPassword} className="mt-4 space-y-3.5">
                 <p className="text-xs text-zinc-400">
-                  Enter your account email. Supabase will dispatch a password recovery link.
+                  Enter your email address to receive a password reset link.
                 </p>
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">
                     Email Address
                   </label>
                   <input
                     type="email"
                     required
-                    placeholder="name@example.com"
+                    placeholder="name@company.com"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2 text-xs text-white placeholder-zinc-500 transition-colors"
                   />
                 </div>
 
@@ -581,16 +467,17 @@ function LoginContent() {
                   <button
                     type="button"
                     onClick={() => setIsForgotModalOpen(false)}
-                    className="px-3 py-1.5 rounded-lg border border-zinc-700 text-xs text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                    className="px-3 py-1.5 rounded-xl border border-zinc-800 text-xs text-zinc-300 hover:bg-zinc-800 cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={forgotLoading}
-                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm disabled:opacity-50 cursor-pointer"
+                    style={{ backgroundColor: "var(--accent-color)" }}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-black shadow-sm disabled:opacity-50 cursor-pointer"
                   >
-                    {forgotLoading ? "Sending..." : "Send Reset Link"}
+                    {forgotLoading ? "Sending..." : "Send Link"}
                   </button>
                 </div>
               </form>
@@ -606,11 +493,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex-1 flex items-center justify-center p-8 text-xs text-zinc-400">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
-            Loading Authentication...
-          </div>
+        <div className="flex-1 flex items-center justify-center p-8 bg-black">
+          <OwlLoader text="Buffering Authentication..." size="md" />
         </div>
       }
     >

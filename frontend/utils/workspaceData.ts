@@ -9,7 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 // ==============================================================================
 
 export type MemberRoleType = "manager" | "developer";
-export type SystemRole = "Admin" | "Member" | "Editor" | "Viewer";
+export type SystemRole = "Admin" | "Manager" | "Developer" | "Viewer";
 
 export interface ActivityLogItem {
   id: string;
@@ -27,6 +27,7 @@ export interface Member {
   system_role?: SystemRole;  // System access tier (Admin, Member, Editor, Viewer)
   department: string;        // e.g. "Cognitive Architecture", "Core Platform"
   avatar_color: string;      // Tailwind gradient
+  owl_avatar?: string;       // Cute owl avatar icon ID (e.g. "owl-gold", "owl-scholar", etc.)
   status: "online" | "away" | "offline";
   skills: string[];
   assigned_projects: string[];
@@ -36,12 +37,33 @@ export interface Member {
   activity_log?: ActivityLogItem[];
 }
 
+export type StoryPriority = "low" | "medium" | "high" | "urgent";
+export type StoryStatus = "open" | "in_progress" | "review" | "completed";
+
+export interface Story {
+  id: string;
+  project_id: string;
+  project_name?: string;
+  title: string;
+  description: string;
+  priority: StoryPriority;
+  status: StoryStatus;
+  due_date: string;          // ISO Date string YYYY-MM-DD
+  progress: number;          // 0 to 100 percentage calculated from child tasks
+  created_at: string;
+  updated_at?: string;
+  syncedToSupabase?: boolean;
+  syncError?: string;
+}
+
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type TaskStage = "todo" | "in_progress" | "review" | "done";
 
 export interface Task {
   id: string;
   project_id: string;
+  story_id?: string | null;  // Stories are child of projects; tasks are child of stories!
+  story_title?: string | null;
   project_name: string;
   title: string;
   description: string;
@@ -111,148 +133,213 @@ export const DEFAULT_PROJECTS: ProjectSeed[] = [
 ];
 
 export const DEFAULT_MEMBERS: Member[] = [
-  // --- MANAGERS ---
   {
-    id: "m-001",
-    name: "Dr. Sarah Chen",
-    email: "sarah.chen@cognitive.ai",
+    id: "m-ramarao",
+    name: "Rama Rao",
+    email: "ramarao123@gmail.com",
     role_type: "manager",
     system_role: "Admin",
-    role_title: "Head of Cognitive Architecture",
+    role_title: "Workspace Co-Founder & Executive Admin",
     department: "Executive & AI Strategy",
     avatar_color: "from-amber-500 to-rose-600",
+    owl_avatar: "avatar-1",
     status: "online",
-    skills: ["LangGraph Orchestration", "Multi-Agent Topology", "System Design"],
+    skills: ["System Architecture", "Autonomous Multi-Agent Cognition", "Enterprise Governance"],
     assigned_projects: ["Financial Document Intelligence", "Regulatory Web Scraper"],
-    created_at: "2026-09-15T08:00:00Z",
-    joined_date: "2026-09-15T08:00:00Z",
-    bio: "Pioneering state machine graph topologies for autonomous multi-agent cognition. Leads enterprise reasoning workflows and governance.",
+    created_at: "2026-09-01T08:00:00Z",
+    joined_date: "2026-09-01T08:00:00Z",
+    bio: "Workspace Co-Founder and Executive Administrator with complete platform governance, role authority, and story orchestration permissions.",
     activity_log: [
-      { id: "act-1", action: "Approved architectural RFC for pgvector clustering", timestamp: "2026-10-14T10:15:00Z" },
-      { id: "act-2", action: "Assigned Financial Document Intelligence pipeline tasks", timestamp: "2026-10-12T14:30:00Z" },
-      { id: "act-3", action: "Promoted to Workspace Admin", timestamp: "2026-09-15T08:00:00Z" }
+      { id: "act-rr-1", action: "System initialized with Executive Admin privileges", timestamp: "2026-09-01T08:00:00Z" },
+      { id: "act-rr-2", action: "Configured core workspace security & permissions matrix", timestamp: "2026-10-10T09:00:00Z" }
     ]
   },
   {
-    id: "m-002",
-    name: "Marcus Vance",
-    email: "marcus.vance@cognitive.ai",
+    id: "m-prince",
+    name: "prince ♡",
+    email: "skprofessional321@gmail.com",
     role_type: "manager",
     system_role: "Admin",
-    role_title: "Product & Delivery Lead",
-    department: "Product Management",
-    avatar_color: "from-indigo-600 to-purple-600",
+    role_title: "Core Systems & Agentic Engineering Lead",
+    department: "Core Architecture & Systems",
+    avatar_color: "from-rose-500 via-purple-600 to-indigo-600",
+    owl_avatar: "avatar-8",
     status: "online",
-    skills: ["Roadmap Planning", "Vector Search KPIs", "Agile Execution"],
+    skills: ["Multi-Agent Topology", "Distributed Systems", "Full Platform Governance"],
     assigned_projects: ["Biomedical Literature Search", "Financial Document Intelligence"],
-    created_at: "2026-09-18T09:30:00Z",
-    joined_date: "2026-09-18T09:30:00Z",
-    bio: "Directs product strategy across agentic copilot features and cross-department team velocity metrics.",
+    created_at: "2026-09-01T08:00:00Z",
+    joined_date: "2026-09-01T08:00:00Z",
+    bio: "Principal Systems Architect and Workspace Administrator with full access across all workspace projects, stories, and task backlogs.",
     activity_log: [
-      { id: "act-4", action: "Finalized sprint goals for Q4 LLM benchmark suite", timestamp: "2026-10-13T16:00:00Z" },
-      { id: "act-5", action: "Configured team milestone review cadence", timestamp: "2026-10-09T11:20:00Z" }
+      { id: "act-pr-1", action: "Configured multi-agent workspace pipelines and admin authority", timestamp: "2026-09-01T08:00:00Z" },
+      { id: "act-pr-2", action: "Audited Supabase real-time story and task sync", timestamp: "2026-10-14T11:00:00Z" }
     ]
   },
   {
-    id: "m-003",
-    name: "Elena Rostova",
-    email: "elena.rostova@cognitive.ai",
+    id: "m-anusha",
+    name: "Anusha",
+    email: "anushaeswari1998@gmail.com",
     role_type: "manager",
-    system_role: "Editor",
-    role_title: "Engineering Manager (Data Pipelines)",
-    department: "Platform Engineering",
-    avatar_color: "from-pink-500 to-red-600",
-    status: "away",
-    skills: ["ETL Pipelines", "Compliance Guardrails", "Security Audits"],
-    assigned_projects: ["Regulatory Web Scraper"],
-    created_at: "2026-09-20T11:00:00Z",
-    joined_date: "2026-09-20T11:00:00Z",
-    bio: "Oversees large-scale document scraping pipelines and data compliance guardrails for regulatory compliance.",
-    activity_log: [
-      { id: "act-6", action: "Executed data compliance audit on ingestion queue", timestamp: "2026-10-14T09:45:00Z" },
-      { id: "act-7", action: "Reviewed Regulatory Web Scraper test coverage", timestamp: "2026-10-11T13:10:00Z" }
-    ]
-  },
-
-  // --- DEVELOPERS ---
-  {
-    id: "d-001",
-    name: "Alex Rivera",
-    email: "alex.rivera@cognitive.ai",
-    role_type: "developer",
-    system_role: "Editor",
-    role_title: "Senior LangGraph & Python Engineer",
-    department: "AI Agent Development",
-    avatar_color: "from-blue-600 to-cyan-500",
-    status: "online",
-    skills: ["Python", "LangGraph", "FastAPI", "Prompt Engineering"],
-    assigned_projects: ["Financial Document Intelligence", "Regulatory Web Scraper"],
-    created_at: "2026-09-25T10:00:00Z",
-    joined_date: "2026-09-25T10:00:00Z",
-    bio: "Core contributor building cyclical multi-agent graphs with state checkpointing and dynamic tool routing.",
-    activity_log: [
-      { id: "act-8", action: "Merged LangGraph cyclic recursion optimization", timestamp: "2026-10-15T08:30:00Z" },
-      { id: "act-9", action: "Updated FastAPI streaming response handler", timestamp: "2026-10-13T17:15:00Z" }
-    ]
-  },
-  {
-    id: "d-002",
-    name: "Priya Sharma",
-    email: "priya.sharma@cognitive.ai",
-    role_type: "developer",
-    system_role: "Member",
-    role_title: "Fullstack Next.js & UI Engineer",
-    department: "Frontend Experience",
+    system_role: "Admin",
+    role_title: "Lead Platform Administrator & AI Strategist",
+    department: "AI Systems & Governance",
     avatar_color: "from-emerald-500 to-teal-600",
+    owl_avatar: "avatar-2",
     status: "online",
-    skills: ["TypeScript", "Next.js 16", "Tailwind CSS", "React Query"],
+    skills: ["Platform Architecture", "AI Orchestration", "Enterprise Administration"],
+    assigned_projects: ["Financial Document Intelligence", "Biomedical Literature Search"],
+    created_at: "2026-09-05T09:00:00Z",
+    joined_date: "2026-09-05T09:00:00Z",
+    bio: "Lead Platform Administrator overseeing agentic workflow execution and system security governance.",
+    activity_log: [
+      { id: "act-an-1", action: "Authenticated with Executive Admin credentials", timestamp: "2026-09-05T09:00:00Z" }
+    ]
+  },
+  {
+    id: "m-prem",
+    name: "prem",
+    email: "dharshan1620@gmail.com",
+    role_type: "manager",
+    system_role: "Admin",
+    role_title: "Principal Cognitive Systems Architect",
+    department: "Cognitive Computing",
+    avatar_color: "from-sky-500 to-blue-600",
+    owl_avatar: "avatar-3",
+    status: "online",
+    skills: ["Deep Vector Search", "LangGraph Reasoning", "Distributed Compute"],
     assigned_projects: ["Biomedical Literature Search", "Regulatory Web Scraper"],
-    created_at: "2026-09-27T13:45:00Z",
-    joined_date: "2026-09-27T13:45:00Z",
-    bio: "Crafts high-performance interactive client interfaces, master-detail side panels, and responsive UI systems.",
+    created_at: "2026-09-10T10:00:00Z",
+    joined_date: "2026-09-10T10:00:00Z",
+    bio: "Principal Cognitive Systems Architect directing distributed agent coordination and vector retrieval pipelines.",
     activity_log: [
-      { id: "act-10", action: "Refactored Members view into streamlined master-detail drawer", timestamp: "2026-10-15T11:00:00Z" },
-      { id: "act-11", action: "Bound global accent theme variables to layout", timestamp: "2026-10-15T09:30:00Z" }
+      { id: "act-pm-1", action: "Joined core workspace leadership", timestamp: "2026-09-10T10:00:00Z" }
     ]
   },
   {
-    id: "d-003",
-    name: "David Kim",
-    email: "david.kim@cognitive.ai",
-    role_type: "developer",
-    system_role: "Member",
-    role_title: "Document Ingestion & PyMuPDF Specialist",
-    department: "Document Intelligence",
-    avatar_color: "from-violet-600 to-indigo-600",
+    id: "m-noorul",
+    name: "Noorul Rahuman M",
+    email: "mujebur.rahuman.a@gmail.com",
+    role_type: "manager",
+    system_role: "Admin",
+    role_title: "Executive Engineering Director",
+    department: "Executive Architecture",
+    avatar_color: "from-violet-600 to-purple-700",
+    owl_avatar: "avatar-4",
     status: "online",
-    skills: ["PyMuPDF", "Playwright", "OCR Extraction", "Pandas"],
-    assigned_projects: ["Financial Document Intelligence"],
-    created_at: "2026-10-01T08:15:00Z",
-    joined_date: "2026-10-01T08:15:00Z",
-    bio: "Specialist in unstructured PDF table parsing, bounding box extraction, and multi-column document chunking.",
+    skills: ["Multi-Agent Governance", "Enterprise Infrastructure", "Production Deployments"],
+    assigned_projects: ["Financial Document Intelligence", "Regulatory Web Scraper"],
+    created_at: "2026-09-12T11:00:00Z",
+    joined_date: "2026-09-12T11:00:00Z",
+    bio: "Executive Engineering Director guiding cross-functional engineering teams, production deployments, and AI roadmap.",
     activity_log: [
-      { id: "act-12", action: "Enhanced OCR table boundary segmentation accuracy", timestamp: "2026-10-14T14:20:00Z" },
-      { id: "act-13", action: "Indexed 1,200 financial filing PDFs", timestamp: "2026-10-10T15:40:00Z" }
+      { id: "act-nr-1", action: "Platform governance and workspace authorization activated", timestamp: "2026-09-12T11:00:00Z" }
     ]
   },
   {
-    id: "d-004",
-    name: "Sophia Taylor",
-    email: "sophia.taylor@cognitive.ai",
-    role_type: "developer",
-    system_role: "Viewer",
-    role_title: "Vector DB & Supabase Systems Dev",
-    department: "Storage & Semantic Retrieval",
-    avatar_color: "from-sky-500 to-indigo-500",
-    status: "offline",
-    skills: ["Supabase", "pgvector", "PostgreSQL", "Embeddings"],
-    assigned_projects: ["Biomedical Literature Search"],
-    created_at: "2026-10-02T14:20:00Z",
-    joined_date: "2026-10-02T14:20:00Z",
-    bio: "Focuses on HNSW index tuning, cosine distance thresholds, and hybrid sparse-dense vector retrieval.",
+    id: "m-premravan",
+    name: "Prem Ravan",
+    email: "premravan2000@gmail.com",
+    role_type: "manager",
+    system_role: "Admin",
+    role_title: "Lead Cloud Infrastructure Architect",
+    department: "Platform Engineering",
+    avatar_color: "from-orange-500 to-amber-600",
+    owl_avatar: "avatar-5",
+    status: "online",
+    skills: ["Cloud Automation", "High Availability", "Database Scaling"],
+    assigned_projects: ["Financial Document Intelligence", "Biomedical Literature Search"],
+    created_at: "2026-09-15T12:00:00Z",
+    joined_date: "2026-09-15T12:00:00Z",
+    bio: "Lead Cloud Infrastructure Architect ensuring scalable, fault-tolerant execution of high-throughput agent jobs.",
     activity_log: [
-      { id: "act-14", action: "Benchmarked HNSW m=16 ef_construction=64 performance", timestamp: "2026-10-12T16:00:00Z" }
+      { id: "act-prv-1", action: "Configured cloud infrastructure & real-time pubsub", timestamp: "2026-09-15T12:00:00Z" }
     ]
+  },
+  {
+    id: "m-hemavarthini",
+    name: "Hemavarthini",
+    email: "varthini1005@gmail.com",
+    role_type: "manager",
+    system_role: "Admin",
+    role_title: "Principal Cognitive Governance Admin",
+    department: "AI Governance & Assurance",
+    avatar_color: "from-pink-500 to-rose-600",
+    owl_avatar: "avatar-6",
+    status: "online",
+    skills: ["Compliance Guardrails", "Story Orchestration", "Model Verification"],
+    assigned_projects: ["Regulatory Web Scraper", "Biomedical Literature Search"],
+    created_at: "2026-09-18T14:00:00Z",
+    joined_date: "2026-09-18T14:00:00Z",
+    bio: "Principal Cognitive Governance Admin establishing hallucination metrics, compliance audit trails, and access control.",
+    activity_log: [
+      { id: "act-hv-1", action: "Enforced workspace assurance protocols and admin policy", timestamp: "2026-09-18T14:00:00Z" }
+    ]
+  }
+];
+
+export const DEFAULT_STORIES: Story[] = [
+  // --- PROJECT 1: Financial Document Intelligence ---
+  {
+    id: "story-001",
+    project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    project_name: "Financial Document Intelligence",
+    title: "Autonomous 10-K Document Parsing & Extraction Pipeline",
+    description: "Multi-column tabular parsing, bounding box extraction, and SEC Edgar streaming queue for 10-K balance sheets.",
+    priority: "high",
+    status: "in_progress",
+    due_date: "2026-10-24",
+    progress: 50,
+    created_at: "2026-10-04T10:00:00Z"
+  },
+  {
+    id: "story-002",
+    project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    project_name: "Financial Document Intelligence",
+    title: "LangGraph Cyclical State Reasoning & Audit Verifier",
+    description: "State transition guardrails, deadlock prevention, ratio validation benchmarks, and sliding overlap chunking.",
+    priority: "urgent",
+    status: "in_progress",
+    due_date: "2026-10-29",
+    progress: 60,
+    created_at: "2026-10-05T11:00:00Z"
+  },
+  // --- PROJECT 2: Biomedical Literature Search ---
+  {
+    id: "story-003",
+    project_id: "d2a2b2c2-2222-4000-8000-000000000002",
+    project_name: "Biomedical Literature Search",
+    title: "Semantic Vector Grounding & PubMed Crawler",
+    description: "HNSW cosine distance configuration on Supabase pgvector and high-throughput PubMed BioC asynchronous ingest.",
+    priority: "urgent",
+    status: "in_progress",
+    due_date: "2026-10-18",
+    progress: 60,
+    created_at: "2026-10-06T10:00:00Z"
+  },
+  {
+    id: "story-004",
+    project_id: "d2a2b2c2-2222-4000-8000-000000000002",
+    project_name: "Biomedical Literature Search",
+    title: "Citation Graph Claim Verification & Grounding Standards",
+    description: "Validate factual claim citation accuracy and establish zero-hallucination threshold score metrics.",
+    priority: "medium",
+    status: "open",
+    due_date: "2026-10-22",
+    progress: 0,
+    created_at: "2026-10-07T14:00:00Z"
+  },
+  // --- PROJECT 3: Regulatory Web Scraper ---
+  {
+    id: "story-005",
+    project_id: "d3a3b3c3-3333-4000-8000-000000000003",
+    project_name: "Regulatory Web Scraper",
+    title: "Stealth Federal Ingestion & Change Detection Engine",
+    description: "Headless Chromium Playwright session management, notice diff engine, and automated compliance webhooks.",
+    priority: "urgent",
+    status: "in_progress",
+    due_date: "2026-10-28",
+    progress: 45,
+    created_at: "2026-10-07T08:00:00Z"
   }
 ];
 
@@ -261,6 +348,8 @@ export const DEFAULT_TASKS: Task[] = [
   {
     id: "task-001",
     project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    story_id: "story-001",
+    story_title: "Autonomous 10-K Document Parsing & Extraction Pipeline",
     project_name: "Financial Document Intelligence",
     title: "Implement PyMuPDF 10-K Table Extraction Parser",
     description: "Extract multi-column tabular balance sheets and income statements into structured JSON chunks with bounding boxes.",
@@ -271,15 +360,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "high",
     stage: "in_progress",
-    assigned_to_id: "d-003",
-    assigned_to_name: "David Kim",
-    assigned_to_role: "Document Ingestion Specialist",
+    assigned_to_id: "m-ramarao",
+    assigned_to_name: "Rama Rao",
+    assigned_to_role: "Workspace Co-Founder & Executive Admin",
     due_date: "2026-10-15",
     created_at: "2026-10-05T09:00:00Z"
   },
   {
     id: "task-002",
     project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    story_id: "story-002",
+    story_title: "LangGraph Cyclical State Reasoning & Audit Verifier",
     project_name: "Financial Document Intelligence",
     title: "Review LangGraph Multi-Agent Cognitive Loop State",
     description: "Evaluate graph transition conditions and prevent recursive deadlocks in ratio calculation agent.",
@@ -290,15 +381,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "urgent",
     stage: "review",
-    assigned_to_id: "m-001",
-    assigned_to_name: "Dr. Sarah Chen",
-    assigned_to_role: "Head of Cognitive Architecture",
+    assigned_to_id: "m-prince",
+    assigned_to_name: "prince ♡",
+    assigned_to_role: "Lead Systems Architect & Workspace Admin",
     due_date: "2026-10-12",
     created_at: "2026-10-06T11:20:00Z"
   },
   {
     id: "task-003",
     project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    story_id: "story-002",
+    story_title: "LangGraph Cyclical State Reasoning & Audit Verifier",
     project_name: "Financial Document Intelligence",
     title: "Unit Test Semantic Chunking Overlap Window",
     description: "Verify 15% sliding window overlap preserves context boundaries across SEC disclosures.",
@@ -308,15 +401,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "medium",
     stage: "done",
-    assigned_to_id: "d-001",
-    assigned_to_name: "Alex Rivera",
-    assigned_to_role: "Senior LangGraph Engineer",
+    assigned_to_id: "m-ramarao",
+    assigned_to_name: "Rama Rao",
+    assigned_to_role: "Workspace Co-Founder & Executive Admin",
     due_date: "2026-10-08",
     created_at: "2026-10-02T14:00:00Z"
   },
   {
     id: "task-004",
     project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    story_id: "story-001",
+    story_title: "Autonomous 10-K Document Parsing & Extraction Pipeline",
     project_name: "Financial Document Intelligence",
     title: "Automate SEC Edgar RSS Feed Ingestion Webhook",
     description: "Poll newly filed 10-K and 10-Q forms and queue them into Redis stream for asynchronous ingestion.",
@@ -327,15 +422,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "medium",
     stage: "todo",
-    assigned_to_id: "d-003",
-    assigned_to_name: "David Kim",
-    assigned_to_role: "Document Ingestion Specialist",
+    assigned_to_id: "m-prince",
+    assigned_to_name: "prince ♡",
+    assigned_to_role: "Lead Systems Architect & Workspace Admin",
     due_date: "2026-10-24",
     created_at: "2026-10-08T09:30:00Z"
   },
   {
     id: "task-005",
     project_id: "d1a1b1c1-1111-4000-8000-000000000001",
+    story_id: "story-002",
+    story_title: "LangGraph Cyclical State Reasoning & Audit Verifier",
     project_name: "Financial Document Intelligence",
     title: "Benchmarking SEC Ratio Reasoning Accuracy vs SEC filings",
     description: "Compare automated EBITDA & debt-to-equity ratio calculations against certified audited filings.",
@@ -345,9 +442,9 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "high",
     stage: "todo",
-    assigned_to_id: "m-002",
-    assigned_to_name: "Marcus Vance",
-    assigned_to_role: "Product & Delivery Lead",
+    assigned_to_id: "m-ramarao",
+    assigned_to_name: "Rama Rao",
+    assigned_to_role: "Workspace Co-Founder & Executive Admin",
     due_date: "2026-10-29",
     created_at: "2026-10-09T10:00:00Z"
   },
@@ -356,6 +453,8 @@ export const DEFAULT_TASKS: Task[] = [
   {
     id: "task-006",
     project_id: "d2a2b2c2-2222-4000-8000-000000000002",
+    story_id: "story-003",
+    story_title: "Semantic Vector Grounding & PubMed Crawler",
     project_name: "Biomedical Literature Search",
     title: "Configure Supabase pgvector Indexing & HNSW Cosine Distance",
     description: "Set up m=16 ef_construction=64 on pubmed_abstracts embedding column for sub-50ms latency.",
@@ -365,15 +464,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "high",
     stage: "in_progress",
-    assigned_to_id: "d-004",
-    assigned_to_name: "Sophia Taylor",
-    assigned_to_role: "Vector DB Engineer",
+    assigned_to_id: "m-prince",
+    assigned_to_name: "prince ♡",
+    assigned_to_role: "Lead Systems Architect & Workspace Admin",
     due_date: "2026-10-18",
     created_at: "2026-10-07T10:15:00Z"
   },
   {
     id: "task-007",
     project_id: "d2a2b2c2-2222-4000-8000-000000000002",
+    story_id: "story-004",
+    story_title: "Citation Graph Claim Verification & Grounding Standards",
     project_name: "Biomedical Literature Search",
     title: "Sign-off on RAG Citation Graph Grounding Standards",
     description: "Approve accuracy metrics and threshold scores for citation claims in biomedical synthesis.",
@@ -383,15 +484,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "medium",
     stage: "todo",
-    assigned_to_id: "m-002",
-    assigned_to_name: "Marcus Vance",
-    assigned_to_role: "Product & Delivery Lead",
+    assigned_to_id: "m-ramarao",
+    assigned_to_name: "Rama Rao",
+    assigned_to_role: "Workspace Co-Founder & Executive Admin",
     due_date: "2026-10-22",
     created_at: "2026-10-08T15:00:00Z"
   },
   {
     id: "task-008",
     project_id: "d2a2b2c2-2222-4000-8000-000000000002",
+    story_id: "story-003",
+    story_title: "Semantic Vector Grounding & PubMed Crawler",
     project_name: "Biomedical Literature Search",
     title: "PubMed BioC API Batch Ingest Script",
     description: "High-throughput asynchronous fetcher for PubMed XML papers using httpx and asyncio queues.",
@@ -401,9 +504,9 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "urgent",
     stage: "review",
-    assigned_to_id: "d-002",
-    assigned_to_name: "Priya Sharma",
-    assigned_to_role: "Fullstack Engineer",
+    assigned_to_id: "m-prince",
+    assigned_to_name: "prince ♡",
+    assigned_to_role: "Lead Systems Architect & Workspace Admin",
     due_date: "2026-10-14",
     created_at: "2026-10-06T14:00:00Z"
   },
@@ -412,6 +515,8 @@ export const DEFAULT_TASKS: Task[] = [
   {
     id: "task-009",
     project_id: "d3a3b3c3-3333-4000-8000-000000000003",
+    story_id: "story-005",
+    story_title: "Stealth Federal Ingestion & Change Detection Engine",
     project_name: "Regulatory Web Scraper",
     title: "Develop Headless Chromium Playwright Session Handler",
     description: "Handle JS-rendered federal register portal without triggering automated bot challenges.",
@@ -421,15 +526,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "urgent",
     stage: "in_progress",
-    assigned_to_id: "d-002",
-    assigned_to_name: "Priya Sharma",
-    assigned_to_role: "Fullstack Engineer",
+    assigned_to_id: "m-ramarao",
+    assigned_to_name: "Rama Rao",
+    assigned_to_role: "Workspace Co-Founder & Executive Admin",
     due_date: "2026-10-14",
     created_at: "2026-10-07T16:30:00Z"
   },
   {
     id: "task-010",
     project_id: "d3a3b3c3-3333-4000-8000-000000000003",
+    story_id: "story-005",
+    story_title: "Stealth Federal Ingestion & Change Detection Engine",
     project_name: "Regulatory Web Scraper",
     title: "Automated Amendment Diffing & Webhook Dispatcher",
     description: "Generate structured diff changelog whenever government notices update.",
@@ -439,15 +546,17 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "low",
     stage: "todo",
-    assigned_to_id: "m-003",
-    assigned_to_name: "Elena Rostova",
-    assigned_to_role: "Engineering Manager",
+    assigned_to_id: "m-prince",
+    assigned_to_name: "prince ♡",
+    assigned_to_role: "Lead Systems Architect & Workspace Admin",
     due_date: "2026-10-28",
     created_at: "2026-10-09T08:00:00Z"
   },
   {
     id: "task-011",
     project_id: "d3a3b3c3-3333-4000-8000-000000000003",
+    story_id: "story-005",
+    story_title: "Stealth Federal Ingestion & Change Detection Engine",
     project_name: "Regulatory Web Scraper",
     title: "HTML DOM Content Sanitizer via BeautifulSoup4",
     description: "Strip header, footer, scripts, ads and extract pure regulatory article bodies.",
@@ -457,9 +566,9 @@ export const DEFAULT_TASKS: Task[] = [
     ],
     priority: "high",
     stage: "done",
-    assigned_to_id: "d-001",
-    assigned_to_name: "Alex Rivera",
-    assigned_to_role: "Senior LangGraph Engineer",
+    assigned_to_id: "m-ramarao",
+    assigned_to_name: "Rama Rao",
+    assigned_to_role: "Workspace Co-Founder & Executive Admin",
     due_date: "2026-10-06",
     created_at: "2026-10-01T12:00:00Z"
   }
@@ -471,10 +580,21 @@ export const DEFAULT_TASKS: Task[] = [
 
 const LS_MEMBERS_KEY = "cognitive_workspace_members";
 const LS_TASKS_KEY = "cognitive_workspace_tasks";
+const LS_STORIES_KEY = "cognitive_workspace_stories_v1";
 
 // ==============================================================================
 // STAGE & PRIORITY METADATA
 // ==============================================================================
+
+export const STORY_STATUS_CONFIG: Record<
+  StoryStatus,
+  { label: string; badge: string; dot: string }
+> = {
+  open: { label: "Open", badge: "border-zinc-700 bg-zinc-800/80 text-zinc-300", dot: "bg-zinc-400" },
+  in_progress: { label: "In Progress", badge: "border-sky-500/30 bg-sky-500/10 text-sky-300", dot: "bg-sky-400 animate-pulse" },
+  review: { label: "In Review", badge: "border-amber-500/30 bg-amber-500/10 text-amber-300", dot: "bg-amber-400" },
+  completed: { label: "Completed", badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", dot: "bg-emerald-400" },
+};
 
 export const STAGE_CONFIG: Record<
   TaskStage,
@@ -540,57 +660,180 @@ export const PRIORITY_CONFIG: Record<
 // DATA FETCHERS & MUTATIONS
 // ==============================================================================
 
+// Helper to filter out legacy mock members (e.g. Dr. Sarah Chen, Marcus Vance, etc.)
+const LEGACY_MOCK_NAMES = new Set([
+  "dr. sarah chen",
+  "sarah chen",
+  "marcus vance",
+  "elena rostova",
+  "alex rivera",
+  "priya sharma",
+  "david kim",
+  "sophia taylor",
+]);
+
+export function isLegacyMockMember(m: Partial<Member>): boolean {
+  if (!m) return false;
+  if (m.id && (m.id.startsWith("m-00") || m.id.startsWith("d-00"))) return true;
+  if (m.name && LEGACY_MOCK_NAMES.has(m.name.toLowerCase().trim())) return true;
+  return false;
+}
+
+export function isDefaultAdmin(name?: string | null, email?: string | null): boolean {
+  if (!name && !email) return false;
+  const n = (name || "").toLowerCase().trim();
+  const e = (email || "").toLowerCase().trim();
+  return (
+    n.includes("rama rao") ||
+    n.includes("ramarao") ||
+    e.includes("ramarao") ||
+    n.includes("prince") ||
+    e.includes("skprofessional321") ||
+    n.includes("anusha") ||
+    e.includes("anushaeswari1998") ||
+    n.includes("prem") ||
+    e.includes("dharshan1620") ||
+    e.includes("premravan2000") ||
+    n.includes("noorul") ||
+    e.includes("mujebur.rahuman") ||
+    n.includes("hemavarthini") ||
+    e.includes("varthini1005")
+  );
+}
+
+// Permission checking helpers based on the 4-tier roles: Admin, Manager, Developer, Viewer
+export function canManageRoles(role?: SystemRole | string): boolean {
+  return role === "Admin";
+}
+
+export function canAddProjectsAndStories(role?: SystemRole | string): boolean {
+  return role === "Admin" || role === "Manager";
+}
+
+export function canAddTasks(role?: SystemRole | string): boolean {
+  return role === "Admin" || role === "Manager" || role === "Developer";
+}
+
+export function isViewerOnly(role?: SystemRole | string): boolean {
+  return role === "Viewer";
+}
+
 export async function fetchWorkspaceMembers(
   supabase?: SupabaseClient
 ): Promise<Member[]> {
+  let loadedMembers: Member[] = [];
+
   if (supabase) {
     try {
       const { data, error } = await supabase
         .from("members")
         .select("*")
-        .order("role_type", { ascending: true });
+        .order("created_at", { ascending: true });
       if (!error && Array.isArray(data) && data.length > 0) {
-        saveMembersLocal(data);
-        return data;
+        // Sanitize data: strip legacy mock members
+        const cleaned = data
+          .filter((m) => !isLegacyMockMember(m))
+          .map((m) => {
+            // "defaultly 'Rama Rao' and 'prince ♡' and others who already exist in supabase are Admins"
+            let sysRole: SystemRole = (m.system_role as SystemRole) || "Developer";
+            if (isDefaultAdmin(m.name, m.email) || !m.system_role || m.system_role === "Member" || m.system_role === "Editor") {
+              sysRole = isDefaultAdmin(m.name, m.email) ? "Admin" : (m.system_role === "Editor" ? "Manager" : "Admin");
+            }
+            return {
+              ...m,
+              system_role: sysRole,
+              role_type: (sysRole === "Admin" || sysRole === "Manager") ? "manager" : "developer",
+            };
+          });
+        if (cleaned.length > 0) {
+          loadedMembers = cleaned;
+        }
       }
     } catch {
-      // Table absent
+      // Table absent or offline
     }
   }
 
-  try {
-    const res = await fetch(`${API_URL}/api/v1/members`);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        saveMembersLocal(data);
-        return data;
+  if (loadedMembers.length === 0) {
+    try {
+      const res = await fetch(`${API_URL}/api/v1/members`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const cleaned = data.filter((m) => !isLegacyMockMember(m));
+          if (cleaned.length > 0) {
+            loadedMembers = cleaned;
+          }
+        }
       }
+    } catch {
+      // Offline
     }
-  } catch {
-    // Offline
   }
 
-  if (typeof window !== "undefined") {
+  if (loadedMembers.length === 0 && typeof window !== "undefined") {
     const local = localStorage.getItem(LS_MEMBERS_KEY);
     if (local) {
       try {
         const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.filter((m) => !isLegacyMockMember(m));
+          if (cleaned.length > 0) {
+            loadedMembers = cleaned;
+          }
+        }
       } catch {
         // Parse error
       }
     }
   }
 
-  saveMembersLocal(DEFAULT_MEMBERS);
-  return DEFAULT_MEMBERS;
+  // 1. Upgrade legacy email placeholders to active Supabase Auth emails if present
+  loadedMembers = loadedMembers.map((m) => {
+    let email = m.email;
+    let owl = m.owl_avatar;
+    if (m.name.toLowerCase().includes("rama rao") && m.email.includes("cognitive.ai")) {
+      email = "ramarao123@gmail.com";
+      owl = owl || "avatar-1";
+    }
+    if (m.name.toLowerCase().includes("prince") && m.email.includes("cognitive.ai")) {
+      email = "skprofessional321@gmail.com";
+      owl = owl || "avatar-8";
+    }
+    const isAdmin = isDefaultAdmin(m.name, email);
+    const sysRole = isAdmin ? "Admin" : (m.system_role || "Developer");
+    return {
+      ...m,
+      email,
+      owl_avatar: owl || "avatar-1",
+      system_role: sysRole as SystemRole,
+      role_type: (sysRole === "Admin" || sysRole === "Manager") ? "manager" : "developer",
+    };
+  });
+
+  // 2. Ensure all 7 Supabase Auth members from DEFAULT_MEMBERS are present in directory
+  const existingEmails = new Set(loadedMembers.map((m) => m.email.toLowerCase().trim()));
+  const existingNames = new Set(loadedMembers.map((m) => m.name.toLowerCase().trim()));
+  for (const defMember of DEFAULT_MEMBERS) {
+    const hasEmail = existingEmails.has(defMember.email.toLowerCase().trim());
+    const hasName = existingNames.has(defMember.name.toLowerCase().trim());
+    if (!hasEmail && !hasName) {
+      loadedMembers.push(defMember);
+      existingEmails.add(defMember.email.toLowerCase().trim());
+      existingNames.add(defMember.name.toLowerCase().trim());
+    }
+  }
+
+  saveMembersLocal(loadedMembers);
+  return loadedMembers;
 }
 
 export function saveMembersLocal(members: Member[]) {
   if (typeof window !== "undefined") {
     try {
-      localStorage.setItem(LS_MEMBERS_KEY, JSON.stringify(members));
+      // Always filter out any legacy mock members before saving
+      const cleaned = members.filter((m) => !isLegacyMockMember(m));
+      localStorage.setItem(LS_MEMBERS_KEY, JSON.stringify(cleaned));
     } catch {
       // Storage error
     }
@@ -616,22 +859,47 @@ export async function addWorkspaceMember(
   }
 
   const existing = await fetchWorkspaceMembers();
-  const updated = [memberWithId, ...existing];
+  const updated = [memberWithId, ...existing.filter((m) => m.id !== memberWithId.id)];
   saveMembersLocal(updated);
   return memberWithId;
 }
 
+/**
+ * Removes a member from the workspace directory and Supabase.
+ * If Supabase RPC delete_user_by_admin is present, also removes from auth.users.
+ */
+export async function deleteWorkspaceMember(
+  memberId: string,
+  supabase?: SupabaseClient
+): Promise<Member[]> {
+  const currentMembers = await fetchWorkspaceMembers();
+  const updated = currentMembers.filter((m) => m.id !== memberId);
+  saveMembersLocal(updated);
+
+  if (supabase) {
+    try {
+      await supabase.from("members").delete().eq("id", memberId);
+      await supabase.rpc("delete_user_by_admin", { target_user_id: memberId });
+    } catch (err) {
+      console.warn("deleteWorkspaceMember remote delete warning:", err);
+    }
+  }
+
+  return updated;
+}
+
 // ------------------------------------------------------------------------------
-// ROLE ASSIGNMENT & REAL-TIME SYNCHRONIZATION HELPERS (Task 4)
+// ROLE ASSIGNMENT & REAL-TIME SYNCHRONIZATION HELPERS
 // ------------------------------------------------------------------------------
 
 /**
- * Mock network dispatch to update a member's role privilege.
- * Triggers simulated latency, logs JSON payload, and updates local state & storage.
+ * Updates a member's system role privilege.
+ * Only Workspace Admins should trigger this function.
  */
 export async function updateUserRole(
   userId: string,
-  newRole: SystemRole
+  newRole: SystemRole,
+  supabase?: SupabaseClient
 ): Promise<{ success: boolean; updatedMember: Member | null; payload: { userId: string; role: SystemRole; updated_at: string } }> {
   const timestamp = new Date().toISOString();
   const payload = {
@@ -640,13 +908,9 @@ export async function updateUserRole(
     updated_at: timestamp,
   };
 
-  // Structured stub log for the network dispatch
-  console.info("[MOCK NETWORK DISPATCH] PATCH /api/members/" + userId + "/role", payload);
+  console.info("[ROLE UPDATE DISPATCH] PATCH /api/members/" + userId + "/role", payload);
 
-  // Simulate network latency (300ms)
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  const members = await fetchWorkspaceMembers();
+  const members = await fetchWorkspaceMembers(supabase);
   let updatedMember: Member | null = null;
 
   const updatedMembers = members.map((m) => {
@@ -655,11 +919,12 @@ export async function updateUserRole(
         id: `act-${Date.now().toString(36)}`,
         action: `Assigned role privilege: ${newRole}`,
         timestamp,
-        details: `Privilege updated from ${m.system_role || "Member"} to ${newRole}`,
+        details: `Privilege updated from ${m.system_role || "Developer"} to ${newRole}`,
       };
       const updated: Member = {
         ...m,
         system_role: newRole,
+        role_type: (newRole === "Admin" || newRole === "Manager") ? "manager" : "developer",
         activity_log: [newActivity, ...(m.activity_log || [])],
       };
       updatedMember = updated;
@@ -669,68 +934,214 @@ export async function updateUserRole(
   });
 
   saveMembersLocal(updatedMembers);
+
+  if (supabase && updatedMember) {
+    try {
+      await supabase
+        .from("members")
+        .update({
+          system_role: newRole,
+          role_type: (newRole === "Admin" || newRole === "Manager") ? "manager" : "developer",
+        })
+        .eq("id", userId);
+    } catch {}
+  }
+
   return { success: true, updatedMember, payload };
 }
 
 /**
- * Ensures the currently signed-in authenticated user appears in the members list immediately.
+ * Allows a user to edit their basic profile details (name, role_title, department, bio, skills).
+ */
+export async function updateMemberBasicDetails(
+  memberId: string,
+  details: {
+    name?: string;
+    role_title?: string;
+    department?: string;
+    bio?: string;
+    skills?: string[];
+  },
+  supabase?: SupabaseClient
+): Promise<Member | null> {
+  const members = await fetchWorkspaceMembers(supabase);
+  let updatedMember: Member | null = null;
+
+  const updated = members.map((m) => {
+    if (m.id === memberId) {
+      const up: Member = {
+        ...m,
+        name: details.name !== undefined ? details.name.trim() : m.name,
+        role_title: details.role_title !== undefined ? details.role_title.trim() : m.role_title,
+        department: details.department !== undefined ? details.department.trim() : m.department,
+        bio: details.bio !== undefined ? details.bio.trim() : m.bio,
+        skills: details.skills !== undefined ? details.skills : m.skills,
+      };
+      updatedMember = up;
+      return up;
+    }
+    return m;
+  });
+
+  saveMembersLocal(updated);
+
+  if (supabase && updatedMember) {
+    try {
+      await supabase
+        .from("members")
+        .update({
+          name: (updatedMember as Member).name,
+          role_title: (updatedMember as Member).role_title,
+          department: (updatedMember as Member).department,
+          bio: (updatedMember as Member).bio,
+          skills: (updatedMember as Member).skills,
+        })
+        .eq("id", memberId);
+    } catch {}
+  }
+
+  return updatedMember;
+}
+
+/**
+ * Ensures the currently signed-in authenticated user appears in the members list immediately,
+ * and synchronizes them to Supabase and localStorage.
  */
 export function syncCurrentUserToMembers(
   authUser: { id?: string; email?: string; user_metadata?: { full_name?: string } } | null,
-  currentMembers: Member[]
+  currentMembers: Member[],
+  supabase?: SupabaseClient
 ): { updatedList: Member[]; newlyAdded: Member | null } {
   if (!authUser || !authUser.email) {
     return { updatedList: currentMembers, newlyAdded: null };
   }
 
+  const emailLower = authUser.email.toLowerCase().trim();
+  const displayName =
+    authUser.user_metadata?.full_name || authUser.email.split("@")[0] || "Workspace Member";
+  const isDefaultAdminUser = isDefaultAdmin(displayName, emailLower);
+
   const existingIndex = currentMembers.findIndex(
-    (m) => m.email.toLowerCase() === authUser.email!.toLowerCase() || m.id === authUser.id
+    (m) => (m.email && m.email.toLowerCase().trim() === emailLower) || m.id === authUser.id
   );
 
   if (existingIndex >= 0) {
     const existing = currentMembers[existingIndex];
+    let changed = false;
+    const updated = [...currentMembers];
+    // If user matches Rama Rao or prince, ensure Admin
+    let currentRole: SystemRole = (existing.system_role as SystemRole) || "Developer";
+    if (isDefaultAdminUser && currentRole !== "Admin") {
+      currentRole = "Admin";
+      changed = true;
+    }
     if (existing.status !== "online") {
-      const updated = [...currentMembers];
-      updated[existingIndex] = { ...existing, status: "online" };
+      changed = true;
+    }
+
+    if (changed) {
+      updated[existingIndex] = {
+        ...existing,
+        status: "online",
+        system_role: currentRole,
+      };
       saveMembersLocal(updated);
+      if (supabase) {
+        supabase
+          .from("members")
+          .update({ status: "online", system_role: currentRole })
+          .eq("id", existing.id)
+          .then(() => {}, () => {});
+      }
       return { updatedList: updated, newlyAdded: null };
     }
     return { updatedList: currentMembers, newlyAdded: null };
   }
 
-  // Generate new member for the signed-in session
-  const displayName =
-    authUser.user_metadata?.full_name || authUser.email.split("@")[0] || "Workspace Member";
+  // Newly signed-in member
   const now = new Date().toISOString();
-
+  const targetRole: SystemRole = isDefaultAdminUser ? "Admin" : "Developer";
   const newMember: Member = {
     id: authUser.id || `m-auth-${Date.now().toString(36)}`,
     name: displayName,
     email: authUser.email,
-    role_type: "developer",
-    system_role: "Member",
-    role_title: "Active Workspace Contributor",
-    department: "AI Agent Development",
+    role_type: targetRole === "Admin" ? "manager" : "developer",
+    system_role: targetRole,
+    role_title: targetRole === "Admin" ? "Workspace Administrator" : "Software Developer",
+    department: targetRole === "Admin" ? "Executive & AI Strategy" : "AI Agent Development",
     avatar_color: "from-indigo-600 via-purple-600 to-pink-500",
+    owl_avatar: (typeof window !== "undefined" && localStorage.getItem("user_owl_avatar")) || "avatar-1",
     status: "online",
     skills: ["AI Systems", "Next.js", "Collaboration"],
     assigned_projects: ["Financial Document Intelligence"],
     created_at: now,
     joined_date: now,
-    bio: "Signed in via Cognitive Workspace auth session. Synchronized with live workspace members ecosystem.",
+    bio: "Signed in via Cognitive Workspace auth session. Synchronized with live workspace members directory.",
     activity_log: [
       {
         id: `act-${Date.now().toString(36)}`,
-        action: "User signed in and initialized in talent roster",
+        action: `User registered & signed in with ${targetRole} role`,
         timestamp: now,
-        details: "Live authenticated session synchronized into talent directory.",
+        details: "Live authenticated session registered in workspace roster.",
       },
     ],
   };
 
   const updatedList = [newMember, ...currentMembers];
   saveMembersLocal(updatedList);
+
+  if (supabase) {
+    supabase
+      .from("members")
+      .upsert([
+        {
+          id: newMember.id,
+          name: newMember.name,
+          email: newMember.email,
+          role_type: newMember.role_type,
+          system_role: newMember.system_role,
+          role_title: newMember.role_title,
+          department: newMember.department,
+          avatar_color: newMember.avatar_color,
+          owl_avatar: newMember.owl_avatar,
+          status: newMember.status,
+          skills: newMember.skills,
+          assigned_projects: newMember.assigned_projects,
+          created_at: newMember.created_at,
+        },
+      ])
+      .then(() => {}, () => {});
+  }
+
   return { updatedList, newlyAdded: newMember };
+}
+
+/**
+ * Updates a member's chosen owl avatar across local storage and Supabase if available.
+ */
+export async function updateMemberAvatar(
+  memberId: string,
+  newOwlAvatar: string,
+  supabase?: SupabaseClient
+): Promise<Member | null> {
+  const members = await fetchWorkspaceMembers(supabase);
+  let updatedMember: Member | null = null;
+  const updated = members.map((m) => {
+    if (m.id === memberId) {
+      const up = { ...m, owl_avatar: newOwlAvatar };
+      updatedMember = up;
+      return up;
+    }
+    return m;
+  });
+  saveMembersLocal(updated);
+
+  if (supabase) {
+    try {
+      await supabase.from("members").update({ owl_avatar: newOwlAvatar }).eq("id", memberId);
+    } catch {}
+  }
+  return updatedMember;
 }
 
 /**
@@ -743,50 +1154,40 @@ export function simulateNewUserSignIn(): Member {
       email: "jordan.blake@cognitive.ai",
       role_title: "AI Security & Guardrails Engineer",
       role_type: "developer" as MemberRoleType,
-      system_role: "Editor" as SystemRole,
+      system_role: "Developer" as SystemRole,
       department: "SecOps & Guardrails",
       avatar_color: "from-rose-500 to-orange-500",
       skills: ["Red Teaming", "Llama Guard", "Prompt Defense"],
       bio: "Focuses on adversarial robustness, jailbreak defense, and automated compliance auditing.",
     },
     {
-      name: "Kavita Rao",
-      email: "kavita.rao@cognitive.ai",
+      name: "Kavita Patel",
+      email: "kavita.patel@cognitive.ai",
       role_title: "Prompt Evaluation & Alignment Lead",
       role_type: "manager" as MemberRoleType,
-      system_role: "Admin" as SystemRole,
-      department: "AI Alignment",
-      avatar_color: "from-teal-500 to-emerald-600",
-      skills: ["RLHF", "DSPy Optimizers", "Evaluation Metrics"],
-      bio: "Leads automated prompt synthesis pipelines and empirical evaluation harnesses for multi-agent benchmarks.",
+      system_role: "Manager" as SystemRole,
+      department: "Product Management",
+      avatar_color: "from-amber-500 to-yellow-600",
+      skills: ["Roadmap Planning", "Story Mapping", "KPI Benchmarks"],
+      bio: "Aligns cognitive agents with regulatory compliance and cross-functional team milestones.",
     },
     {
-      name: "Liam O'Connor",
-      email: "liam.oconnor@cognitive.ai",
-      role_title: "Distributed Systems & Ingestion Architect",
-      role_type: "developer" as MemberRoleType,
-      system_role: "Member" as SystemRole,
-      department: "Core Platform",
-      avatar_color: "from-violet-600 to-fuchsia-600",
-      skills: ["Kafka", "Celery", "FastAPI", "Redis"],
-      bio: "Architects high-throughput distributed ingestion queues and streaming workers for document intelligence.",
-    },
-    {
-      name: "Mei-Ling Zhou",
-      email: "meiling.zhou@cognitive.ai",
-      role_title: "Vector DB Performance Specialist",
+      name: "Samir Khan",
+      email: "samir.khan@cognitive.ai",
+      role_title: "Compliance Auditor",
       role_type: "developer" as MemberRoleType,
       system_role: "Viewer" as SystemRole,
-      department: "Storage & Semantic Retrieval",
-      avatar_color: "from-cyan-500 to-blue-600",
-      skills: ["pgvector", "HNSW Tuning", "Hybrid Search"],
-      bio: "Optimizes vector embedding indexing and low-latency reciprocal rank fusion search algorithms.",
+      department: "Legal & Regulatory",
+      avatar_color: "from-zinc-500 to-zinc-700",
+      skills: ["Audit Trails", "Evidence Review"],
+      bio: "Read-only workspace compliance auditor reviewing evidence logs and story completion benchmarks.",
     },
   ];
 
   const template = sampleUsers[Math.floor(Math.random() * sampleUsers.length)];
   const uniqueId = `m-sim-${Date.now().toString(36)}-${Math.floor(Math.random() * 900 + 100)}`;
   const now = new Date().toISOString();
+  const owlIdx = Math.floor(Math.random() * 12) + 1;
 
   return {
     id: uniqueId,
@@ -797,6 +1198,7 @@ export function simulateNewUserSignIn(): Member {
     role_title: template.role_title,
     department: template.department,
     avatar_color: template.avatar_color,
+    owl_avatar: `avatar-${owlIdx}`,
     status: "online",
     skills: template.skills,
     assigned_projects: ["Financial Document Intelligence"],
@@ -806,7 +1208,7 @@ export function simulateNewUserSignIn(): Member {
     activity_log: [
       {
         id: `act-${Date.now().toString(36)}`,
-        action: "Signed in via Workspace SSO",
+        action: `Signed in with ${template.system_role} role`,
         timestamp: now,
         details: "Instant profile provisioning and talent synchronization completed.",
       },
@@ -883,6 +1285,8 @@ export async function fetchWorkspaceTasks(
           return {
             id: t.id,
             project_id: t.project_id,
+            story_id: t.story_id || localMatch?.story_id || null,
+            story_title: t.story_title || localMatch?.story_title || null,
             project_name: t.project_name || localMatch?.project_name || "Project",
             title: t.title,
             description: t.description ?? "",
@@ -948,7 +1352,7 @@ export async function createWorkspaceTask(
   supabase?: SupabaseClient,
   userId?: string
 ): Promise<Task> {
-  // Always generate a genuine RFC4122 v4 UUID so Postgres UUID type constraint never fails
+  // Always generate a genuine RFC4122 v4 UUID so Postgres UUID/TEXT constraints never fail
   const generatedId = generateUUID();
 
   const newTask: Task = {
@@ -1007,6 +1411,7 @@ export async function createWorkspaceTask(
       const corePayload: Record<string, any> = {
         id: newTask.id,
         project_id: newTask.project_id,
+        story_id: newTask.story_id || null,
         title: newTask.title,
         description: newTask.description || "",
         status: mapStageToStatus(newTask.stage),
@@ -1020,9 +1425,10 @@ export async function createWorkspaceTask(
         corePayload.user_id = userId;
       }
 
-      // 4. Extended payload with stage, member, and path metadata
+      // 4. Extended payload with story, stage, member, and path metadata
       const fullPayload: Record<string, any> = {
         ...corePayload,
+        story_title: newTask.story_title || null,
         stage: newTask.stage,
         project_name: newTask.project_name,
         descriptive_paths: Array.isArray(newTask.descriptive_paths) ? newTask.descriptive_paths : [],
@@ -1053,6 +1459,11 @@ export async function createWorkspaceTask(
       newTask.syncedToSupabase = false;
       newTask.syncError = err?.message || "Network error";
     }
+  }
+
+  // Auto-sync parent story progress if this task belongs to a story
+  if (newTask.story_id) {
+    syncStoryProgressWithTasks(newTask.story_id, getTasksLocal(), supabase);
   }
 
   // Backend sync if online
@@ -1090,6 +1501,8 @@ export async function updateWorkspaceTask(
         ...updates,
         updated_at: nowIso,
       };
+      if (updates.story_id !== undefined) fullUpdates.story_id = updates.story_id;
+      if (updates.story_title !== undefined) fullUpdates.story_title = updates.story_title;
       if (updates.stage) {
         fullUpdates.status = mapStageToStatus(updates.stage);
         fullUpdates.stage = updates.stage;
@@ -1118,6 +1531,12 @@ export async function updateWorkspaceTask(
     }
   }
 
+  // Auto-sync parent story progress if this task belongs to a story
+  const currentTask = updatedTasks.find((t) => t.id === taskId);
+  if (currentTask && currentTask.story_id) {
+    syncStoryProgressWithTasks(currentTask.story_id, updatedTasks, supabase);
+  }
+
   // Backend sync if online
   try {
     await fetch(`${API_URL}/api/v1/tasks/${taskId}`, {
@@ -1137,8 +1556,14 @@ export async function deleteWorkspaceTask(
   supabase?: SupabaseClient
 ): Promise<Task[]> {
   const currentLocal = getTasksLocal();
+  const targetTask = currentLocal.find((t) => t.id === taskId);
   const filtered = currentLocal.filter((t) => t.id !== taskId);
   saveTasksLocal(filtered);
+
+  // Recalculate parent story progress
+  if (targetTask && targetTask.story_id) {
+    syncStoryProgressWithTasks(targetTask.story_id, filtered, supabase);
+  }
 
   if (supabase) {
     try {
@@ -1158,6 +1583,281 @@ export async function deleteWorkspaceTask(
   }
 
   return filtered;
+}
+
+// ==============================================================================
+// STORIES: STORAGE, PROGRESS ROLLUP & CASCADE OPERATIONS
+// ==============================================================================
+
+export function getStoriesLocal(): Story[] {
+  if (typeof window !== "undefined") {
+    const local = localStorage.getItem(LS_STORIES_KEY);
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // Parse error
+      }
+    }
+  }
+  return DEFAULT_STORIES;
+}
+
+export function saveStoriesLocal(stories: Story[]) {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(LS_STORIES_KEY, JSON.stringify(stories));
+    } catch {
+      // Storage error
+    }
+  }
+}
+
+/**
+ * Computes story progress percentage (0 - 100) based on child tasks.
+ * done: 100%, review: 75%, in_progress: 40%, todo: 0%
+ */
+export function computeStoryProgress(storyId: string, allTasks?: Task[]): number {
+  const tasks = allTasks || getTasksLocal();
+  const childTasks = tasks.filter((t) => t.story_id === storyId);
+  if (childTasks.length === 0) return 0;
+
+  const totalScore = childTasks.reduce((acc, t) => {
+    if (t.stage === "done") return acc + 100;
+    if (t.stage === "review") return acc + 75;
+    if (t.stage === "in_progress") return acc + 40;
+    return acc;
+  }, 0);
+
+  return Math.round(totalScore / childTasks.length);
+}
+
+/**
+ * Computes overarching project progress bar based on BOTH stories and tasks.
+ */
+export function computeProjectProgress(
+  projectId: string,
+  stories?: Story[],
+  tasks?: Task[]
+): {
+  progress: number;
+  totalStories: number;
+  completedStories: number;
+  totalTasks: number;
+  doneTasks: number;
+} {
+  const currentStories = (stories || getStoriesLocal()).filter((s) => s.project_id === projectId);
+  const currentTasks = (tasks || getTasksLocal()).filter((t) => t.project_id === projectId);
+
+  const doneTasks = currentTasks.filter((t) => t.stage === "done").length;
+  const totalTasks = currentTasks.length;
+  const totalStories = currentStories.length;
+  const completedStories = currentStories.filter((s) => s.progress === 100 || s.status === "completed").length;
+
+  if (totalStories === 0 && totalTasks === 0) {
+    return { progress: 0, totalStories: 0, completedStories: 0, totalTasks: 0, doneTasks: 0 };
+  }
+
+  let progress = 0;
+  if (totalStories > 0 && totalTasks > 0) {
+    const avgStoryProgress = currentStories.reduce((acc, s) => acc + (s.progress || 0), 0) / totalStories;
+    const taskDoneRatio = (doneTasks / totalTasks) * 100;
+    // 60% weight to stories milestone, 40% weight to direct task completion
+    progress = Math.round(avgStoryProgress * 0.6 + taskDoneRatio * 0.4);
+  } else if (totalStories > 0) {
+    progress = Math.round(currentStories.reduce((acc, s) => acc + (s.progress || 0), 0) / totalStories);
+  } else {
+    progress = Math.round((doneTasks / totalTasks) * 100);
+  }
+
+  return {
+    progress: Math.min(100, Math.max(0, progress)),
+    totalStories,
+    completedStories,
+    totalTasks,
+    doneTasks,
+  };
+}
+
+/**
+ * Synchronizes story progress based on its child tasks and persists the update.
+ */
+export function syncStoryProgressWithTasks(
+  storyId: string,
+  currentTasks: Task[],
+  supabase?: SupabaseClient
+): Story[] {
+  const stories = getStoriesLocal();
+  const newProgress = computeStoryProgress(storyId, currentTasks);
+  const newStatus: StoryStatus =
+    newProgress === 100 ? "completed" : newProgress > 0 ? "in_progress" : "open";
+  const nowIso = new Date().toISOString();
+
+  const updatedStories = stories.map((s) => {
+    if (s.id === storyId) {
+      return {
+        ...s,
+        progress: newProgress,
+        status: newStatus,
+        updated_at: nowIso,
+      };
+    }
+    return s;
+  });
+
+  saveStoriesLocal(updatedStories);
+
+  if (supabase) {
+    supabase
+      .from("stories")
+      .update({ progress: newProgress, status: newStatus, updated_at: nowIso })
+      .eq("id", storyId)
+      .then(
+        () => {},
+        () => {}
+      );
+  }
+
+  return updatedStories;
+}
+
+export async function fetchWorkspaceStories(
+  supabase?: SupabaseClient,
+  projectId?: string
+): Promise<Story[]> {
+  let stories = getStoriesLocal();
+
+  if (supabase) {
+    try {
+      let query = supabase.from("stories").select("*").order("created_at", { ascending: false });
+      if (projectId) query = query.eq("project_id", projectId);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data) && data.length > 0) {
+        stories = data;
+        saveStoriesLocal(stories);
+      }
+    } catch {
+      // Offline or table not migrated
+    }
+  }
+
+  // Ensure progress reflects live tasks
+  const tasks = getTasksLocal();
+  stories = stories.map((s) => ({
+    ...s,
+    progress: computeStoryProgress(s.id, tasks),
+  }));
+
+  if (projectId) {
+    return stories.filter((s) => s.project_id === projectId);
+  }
+  return stories;
+}
+
+export async function createWorkspaceStory(
+  storyData: Omit<Story, "id" | "created_at" | "progress">,
+  supabase?: SupabaseClient
+): Promise<Story> {
+  const newStory: Story = {
+    ...storyData,
+    id: `story-${Date.now().toString(36)}`,
+    progress: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const current = getStoriesLocal();
+  const updated = [newStory, ...current];
+  saveStoriesLocal(updated);
+
+  if (supabase) {
+    try {
+      await supabase.from("stories").insert([newStory]);
+    } catch (err) {
+      console.warn("Supabase createWorkspaceStory error:", err);
+    }
+  }
+
+  return newStory;
+}
+
+/**
+ * Updates a story. If globally changing due_date or priority, cascade to all tasks under this story.
+ */
+export async function updateWorkspaceStory(
+  storyId: string,
+  updates: Partial<Story>,
+  cascadeToTasks: boolean = true,
+  supabase?: SupabaseClient
+): Promise<{ stories: Story[]; tasks: Task[] }> {
+  const stories = getStoriesLocal();
+  const tasks = getTasksLocal();
+  const nowIso = new Date().toISOString();
+
+  // 1. Update the story
+  const updatedStories = stories.map((s) =>
+    s.id === storyId ? { ...s, ...updates, updated_at: nowIso } : s
+  );
+  saveStoriesLocal(updatedStories);
+
+  // 2. Cascade global Due Date & Priority to all child tasks if requested
+  let updatedTasks = tasks;
+  if (cascadeToTasks && (updates.due_date !== undefined || updates.priority !== undefined)) {
+    updatedTasks = tasks.map((t) => {
+      if (t.story_id === storyId) {
+        return {
+          ...t,
+          ...(updates.due_date ? { due_date: updates.due_date } : {}),
+          ...(updates.priority ? { priority: updates.priority as TaskPriority } : {}),
+          updated_at: nowIso,
+        };
+      }
+      return t;
+    });
+    saveTasksLocal(updatedTasks);
+  }
+
+  // 3. Supabase dispatch
+  if (supabase) {
+    try {
+      await supabase.from("stories").update({ ...updates, updated_at: nowIso }).eq("id", storyId);
+      if (cascadeToTasks && (updates.due_date || updates.priority)) {
+        const taskUpdates: Record<string, any> = { updated_at: nowIso };
+        if (updates.due_date) taskUpdates.due_date = new Date(updates.due_date).toISOString();
+        if (updates.priority) taskUpdates.priority = updates.priority;
+        await supabase.from("tasks").update(taskUpdates).eq("story_id", storyId);
+      }
+    } catch (err) {
+      console.warn("Supabase updateWorkspaceStory error:", err);
+    }
+  }
+
+  return { stories: updatedStories, tasks: updatedTasks };
+}
+
+export async function deleteWorkspaceStory(
+  storyId: string,
+  supabase?: SupabaseClient
+): Promise<{ stories: Story[]; tasks: Task[] }> {
+  const stories = getStoriesLocal().filter((s) => s.id !== storyId);
+  saveStoriesLocal(stories);
+
+  // Detach child tasks
+  const tasks = getTasksLocal().map((t) =>
+    t.story_id === storyId ? { ...t, story_id: null, story_title: null } : t
+  );
+  saveTasksLocal(tasks);
+
+  if (supabase) {
+    try {
+      await supabase.from("stories").delete().eq("id", storyId);
+    } catch {
+      // Ignored
+    }
+  }
+
+  return { stories, tasks };
 }
 
 // ==============================================================================

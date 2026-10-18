@@ -9,17 +9,22 @@ import {
   TaskStage,
   TaskPriority,
   Member,
+  Story,
+  SystemRole,
+  isDefaultAdmin,
   STAGE_CONFIG,
   PRIORITY_CONFIG,
   fetchWorkspaceTasks,
+  fetchWorkspaceStories,
   createWorkspaceTask,
   updateWorkspaceTask,
   deleteWorkspaceTask,
   fetchWorkspaceMembers,
   mapStatusToStage,
 } from "@/utils/workspaceData";
+import { useAuth } from "@/components/AuthProvider";
 
-const SQL_SCHEMA_TEXT = `-- Copy & paste into Supabase Dashboard -> SQL Editor:
+const SQL_SCHEMA_TEXT = `-- Cognitive Workspace: Supabase 3-Table Schema (Projects -> Stories -> Tasks)
 -- ==============================================================================
 -- 1. Table: public.projects
 -- ==============================================================================
@@ -38,35 +43,43 @@ CREATE TABLE IF NOT EXISTS public.projects (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
-DROP POLICY IF EXISTS "Allow read projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow insert projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow update projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow delete projects" ON public.projects;
-
-CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
-CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
+DROP TABLE IF EXISTS public.tasks CASCADE;
+DROP TABLE IF EXISTS public.stories CASCADE;
 
 -- ==============================================================================
--- 2. Table: public.tasks
+-- 2. Table: public.stories (Child of Projects)
 -- ==============================================================================
-CREATE TABLE IF NOT EXISTS public.tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
+CREATE TABLE public.stories (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+    project_name TEXT,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'review', 'completed')),
+    due_date TIMESTAMPTZ,
+    progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 3. Table: public.tasks (Child of Stories, Linked to Projects)
+-- ==============================================================================
+CREATE TABLE public.tasks (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    story_id TEXT REFERENCES public.stories(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
     user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     description TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'pending',
     priority TEXT NOT NULL DEFAULT 'medium',
+    stage TEXT NOT NULL DEFAULT 'todo',
     due_date TIMESTAMPTZ,
-    stage TEXT DEFAULT 'todo',
     project_name TEXT,
+    story_title TEXT,
     descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
     assigned_to_id TEXT,
     assigned_to_name TEXT,
@@ -75,44 +88,44 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Safely add missing columns to tasks if table existed previously:
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'todo';
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS project_name TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[];
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_id TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_name TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_role TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
-
--- Make user_id nullable so collaborative workspace members can contribute:
-ALTER TABLE public.tasks ALTER COLUMN user_id DROP NOT NULL;
-
--- Drop old restrictive single-user policies:
+-- Enable RLS and idempotent policies
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
-DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
-DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
-DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
-DROP POLICY IF EXISTS "Users can view own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Users can insert own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow read tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow insert tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow update tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow delete tasks" ON public.tasks;
 
--- Collaborative tasks policies (all team members can read, add, update, delete tasks under projects):
+DROP POLICY IF EXISTS "Allow read projects" ON public.projects;
+CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow insert projects" ON public.projects;
+CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow update projects" ON public.projects;
+CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow read stories" ON public.stories;
+CREATE POLICY "Allow read stories" ON public.stories FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow insert stories" ON public.stories;
+CREATE POLICY "Allow insert stories" ON public.stories FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow update stories" ON public.stories;
+CREATE POLICY "Allow update stories" ON public.stories FOR UPDATE USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow read tasks" ON public.tasks;
 CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Allow insert tasks" ON public.tasks;
 CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow update tasks" ON public.tasks;
 CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow delete tasks" ON public.tasks;
 CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);
 
--- Enable Supabase Realtime so live changes immediately broadcast to other team members:
-ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+-- Enable Supabase Realtime safely
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'tasks') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'stories') THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.stories;
+    END IF;
+END $$;
 `;
 
 interface Project {
@@ -233,13 +246,34 @@ export default function ProjectTasksPage({
   const projectId = decodeURIComponent(resolvedParams.id);
   const supabase = createClient();
   const router = useRouter();
+  const { user } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Derive current user member & role permissions
+  const currentUserMember = useMemo(() => {
+    if (user?.email) {
+      return (
+        members.find(
+          (m) =>
+            (m.email && m.email.toLowerCase() === user.email?.toLowerCase()) ||
+            m.id === user.id
+        ) || null
+      );
+    }
+    return members.find((m) => isDefaultAdmin(m.name, m.email)) || members[0] || null;
+  }, [user, members]);
+
+  const currentUserRole: SystemRole = (currentUserMember?.system_role as SystemRole) || "Admin";
+  const canAddTask = currentUserRole === "Admin" || currentUserRole === "Manager" || currentUserRole === "Developer";
+  const isViewer = currentUserRole === "Viewer";
+
   // Filters within this project
+  const [selectedStoryFilter, setSelectedStoryFilter] = useState<string>("All");
   const [selectedStageFilter, setSelectedStageFilter] = useState<string>("All");
   const [selectedPriorityFilter, setSelectedPriorityFilter] = useState<string>("All");
   const [selectedAssigneeFilter, setSelectedAssigneeFilter] = useState<string>("All");
@@ -280,6 +314,7 @@ export default function ProjectTasksPage({
   const [taskForm, setTaskForm] = useState({
     title: "",
     description: "",
+    story_id: "",
     descriptive_paths_text: "",
     assigned_to_id: "",
     due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
@@ -345,13 +380,15 @@ export default function ProjectTasksPage({
 
     setProject(foundProj);
 
-    // 2. Load Tasks and Members
-    const [allTasks, allMembers] = await Promise.all([
+    // 2. Load Tasks, Members, and Stories
+    const [allTasks, allMembers, allStories] = await Promise.all([
       fetchWorkspaceTasks(supabase),
       fetchWorkspaceMembers(supabase),
+      fetchWorkspaceStories(supabase, foundProj?.id || projectId),
     ]);
 
     setMembers(allMembers);
+    setStories(allStories);
 
     // Filter tasks strictly belonging to this project
     if (foundProj) {
@@ -475,6 +512,7 @@ export default function ProjectTasksPage({
   // Filtered tasks for this project
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
+      const matchesStory = selectedStoryFilter === "All" || t.story_id === selectedStoryFilter;
       const matchesStage = selectedStageFilter === "All" || t.stage === selectedStageFilter;
       const matchesPriority = selectedPriorityFilter === "All" || t.priority === selectedPriorityFilter;
       const matchesAssignee =
@@ -490,12 +528,16 @@ export default function ProjectTasksPage({
         (t.assigned_to_name && t.assigned_to_name.toLowerCase().includes(q)) ||
         (t.descriptive_paths && t.descriptive_paths.some((p) => p.toLowerCase().includes(q)));
 
-      return matchesStage && matchesPriority && matchesAssignee && matchesQuery;
+      return matchesStory && matchesStage && matchesPriority && matchesAssignee && matchesQuery;
     });
-  }, [tasks, selectedStageFilter, selectedPriorityFilter, selectedAssigneeFilter, searchQuery]);
+  }, [tasks, selectedStoryFilter, selectedStageFilter, selectedPriorityFilter, selectedAssigneeFilter, searchQuery]);
 
   // Handle stage change (optimistic update so the task immediately moves without vanishing)
   const handleStageChange = async (taskId: string, newStage: TaskStage) => {
+    if (isViewer) {
+      showToast("Viewers cannot move tasks.", "error");
+      return;
+    }
     // 1. Optimistically update local React state immediately
     setTasks((prevTasks) =>
       prevTasks.map((t) =>
@@ -522,16 +564,23 @@ export default function ProjectTasksPage({
   // Handle Create Task
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canAddTask) {
+      showToast("Only Admins, Managers, and Developers can add tasks.", "error");
+      return;
+    }
     if (!project || !taskForm.title.trim()) return;
 
     setSubmitting(true);
     const assignedMember = members.find((m) => m.id === taskForm.assigned_to_id);
     const parsedPaths = parsePathsString(taskForm.descriptive_paths_text);
+    const chosenStory = stories.find((s) => s.id === taskForm.story_id);
 
     const newTask = await createWorkspaceTask(
       {
         project_id: project.id,
         project_name: project.name,
+        story_id: taskForm.story_id || null,
+        story_title: chosenStory ? chosenStory.title : null,
         title: taskForm.title.trim(),
         description: taskForm.description.trim() || "No additional description.",
         descriptive_paths: parsedPaths,
@@ -550,6 +599,7 @@ export default function ProjectTasksPage({
     setTaskForm({
       title: "",
       description: "",
+      story_id: "",
       descriptive_paths_text: "",
       assigned_to_id: "",
       due_date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
@@ -570,7 +620,7 @@ export default function ProjectTasksPage({
 
   // Handle Update Task in Details Modal
   const handleUpdateTaskDetail = async (updates: Partial<Task>) => {
-    if (!taskDetail || !project) return;
+    if (!taskDetail || !project || isViewer) return;
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskDetail.id
@@ -590,7 +640,7 @@ export default function ProjectTasksPage({
 
   // Handle Delete Task
   const handleDeleteTask = async (taskId: string) => {
-    if (!project) return;
+    if (!project || isViewer) return;
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setTaskDetail(null);
     showToast("Task deleted.");
@@ -754,15 +804,17 @@ export default function ProjectTasksPage({
                 <span>Launch Gemini</span>
               </Link>
 
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Add Task</span>
-              </button>
+              {canAddTask && (
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Task</span>
+                </button>
+              )}
             </div>
           </div>
           {/* NEW: Progress bar. Shows how much of this project is finished. */}
@@ -864,6 +916,23 @@ export default function ProjectTasksPage({
       {/* Task Filters & View Toggle */}
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 mb-6">
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Story Filter */}
+          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs">
+            <span className="text-zinc-500 font-mono text-[10px]">Story:</span>
+            <select
+              value={selectedStoryFilter}
+              onChange={(e) => setSelectedStoryFilter(e.target.value)}
+              className="bg-transparent text-amber-300 text-xs font-semibold focus:outline-none cursor-pointer max-w-[170px] truncate"
+            >
+              <option value="All" className="bg-zinc-900 text-white">All Stories ({stories.length})</option>
+              {stories.map((s) => (
+                <option key={s.id} value={s.id} className="bg-zinc-900 text-white">
+                  {s.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Stage Filter */}
           <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs">
             <span className="text-zinc-500 font-mono text-[10px]">Stage:</span>
@@ -1025,6 +1094,17 @@ export default function ProjectTasksPage({
                                   Due: {formatDate(task.due_date)}
                                 </span>
                               </div>
+                              {task.story_id && (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Link
+                                    href={`/projects/${encodeURIComponent(project?.id || projectId)}/stories/${encodeURIComponent(task.story_id)}`}
+                                    className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-mono text-amber-300 transition"
+                                    title="View this task under its parent story"
+                                  >
+                                    <span>📖 {task.story_title || "Story"} &rarr;</span>
+                                  </Link>
+                                </div>
+                              )}
                               {dueChip && (
                                 <div>
                                   <span className={`inline-block rounded border px-1.5 py-0.5 text-[9px] font-mono ${dueChip.style}`}>
@@ -1088,32 +1168,34 @@ export default function ProjectTasksPage({
                                   </span>
                                 </div>
 
-                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                  {stageKey !== "todo" && (
-                                    <button
-                                      onClick={() => {
-                                        const prevIdx = STAGES.indexOf(stageKey) - 1;
-                                        if (prevIdx >= 0) handleStageChange(task.id, STAGES[prevIdx]);
-                                      }}
-                                      title="Move to previous stage"
-                                      className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition cursor-pointer text-[10px]"
-                                    >
-                                      &larr;
-                                    </button>
-                                  )}
-                                  {stageKey !== "done" && (
-                                    <button
-                                      onClick={() => {
-                                        const nextIdx = STAGES.indexOf(stageKey) + 1;
-                                        if (nextIdx < STAGES.length) handleStageChange(task.id, STAGES[nextIdx]);
-                                      }}
-                                      title="Advance to next stage"
-                                      className="p-1 rounded bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white transition cursor-pointer text-[10px] font-bold px-1.5"
-                                    >
-                                      &rarr;
-                                    </button>
-                                  )}
-                                </div>
+                                {!isViewer && (
+                                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                    {stageKey !== "todo" && (
+                                      <button
+                                        onClick={() => {
+                                          const prevIdx = STAGES.indexOf(stageKey) - 1;
+                                          if (prevIdx >= 0) handleStageChange(task.id, STAGES[prevIdx]);
+                                        }}
+                                        title="Move to previous stage"
+                                        className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition cursor-pointer text-[10px]"
+                                      >
+                                        &larr;
+                                      </button>
+                                    )}
+                                    {stageKey !== "done" && (
+                                      <button
+                                        onClick={() => {
+                                          const nextIdx = STAGES.indexOf(stageKey) + 1;
+                                          if (nextIdx < STAGES.length) handleStageChange(task.id, STAGES[nextIdx]);
+                                        }}
+                                        title="Advance to next stage"
+                                        className="p-1 rounded bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white transition cursor-pointer text-[10px] font-bold px-1.5"
+                                      >
+                                        &rarr;
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -1257,6 +1339,25 @@ export default function ProjectTasksPage({
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
                 />
+              </div>
+
+              {/* Parent Story Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Parent Story (Hierarchical Architecture)
+                </label>
+                <select
+                  value={taskForm.story_id}
+                  onChange={(e) => setTaskForm({ ...taskForm, story_id: e.target.value })}
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-amber-300 focus:border-amber-400 focus:outline-none cursor-pointer"
+                >
+                  <option value="" className="text-zinc-400">No Story (Direct Project Task)</option>
+                  {stories.map((s) => (
+                    <option key={s.id} value={s.id} className="text-white">
+                      📖 {s.title}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Assignee (Managers & Developers) */}
@@ -1432,7 +1533,7 @@ export default function ProjectTasksPage({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {!isEditingTaskInfo && (
+                {!isEditingTaskInfo && !isViewer && (
                   <button
                     onClick={() => setIsEditingTaskInfo(true)}
                     className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition cursor-pointer flex items-center gap-1"
@@ -1582,6 +1683,7 @@ export default function ProjectTasksPage({
                   Assigned Member
                 </p>
                 <select
+                  disabled={isViewer}
                   value={taskDetail.assigned_to_id || ""}
                   onChange={(e) => {
                     const m = members.find((x) => x.id === e.target.value);
@@ -1591,7 +1693,9 @@ export default function ProjectTasksPage({
                       assigned_to_role: m ? m.role_title : null,
                     });
                   }}
-                  className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer truncate"
+                  className={`w-full bg-transparent text-xs font-semibold text-white focus:outline-none truncate ${
+                    isViewer ? "cursor-default opacity-80" : "cursor-pointer"
+                  }`}
                 >
                   <option value="" className="bg-zinc-900">Unassigned</option>
                   <optgroup label="👑 Managers & Leads" className="bg-zinc-900">
@@ -1620,22 +1724,29 @@ export default function ProjectTasksPage({
                   Due Date
                 </p>
                 <input
+                  disabled={isViewer}
                   type="date"
                   value={taskDetail.due_date}
                   onChange={(e) => handleUpdateTaskDetail({ due_date: e.target.value })}
-                  className="w-full bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer"
+                  className={`w-full bg-transparent text-xs font-semibold text-white focus:outline-none ${
+                    isViewer ? "cursor-default opacity-80" : "cursor-pointer"
+                  }`}
                 />
               </div>
             </div>
 
             {/* Bottom Actions */}
             <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
-              <button
-                onClick={() => handleDeleteTask(taskDetail.id)}
-                className="px-3 py-1.5 rounded-lg border border-rose-900/40 bg-rose-950/20 text-rose-300 text-xs font-semibold hover:bg-rose-900/40 cursor-pointer"
-              >
-                Delete Task
-              </button>
+              {!isViewer ? (
+                <button
+                  onClick={() => handleDeleteTask(taskDetail.id)}
+                  className="px-3 py-1.5 rounded-lg border border-rose-900/40 bg-rose-950/20 text-rose-300 text-xs font-semibold hover:bg-rose-900/40 cursor-pointer"
+                >
+                  Delete Task
+                </button>
+              ) : (
+                <div />
+              )}
               <button
                 onClick={() => setTaskDetail(null)}
                 className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white cursor-pointer"

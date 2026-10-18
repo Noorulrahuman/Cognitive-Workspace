@@ -11,6 +11,24 @@ export interface AccentPreset {
 
 export const ACCENT_PRESETS: AccentPreset[] = [
   {
+    id: "amber",
+    name: "Imperial Gold",
+    hex: "#f59e0b",
+    description: "Warm cognitive sunlight and executive leadership sheen",
+  },
+  {
+    id: "silver",
+    name: "Translucent Silver",
+    hex: "#e2e8f0",
+    description: "Pure frosted silver luminance and modern glass clarity",
+  },
+  {
+    id: "teal",
+    name: "Electric Teal",
+    hex: "#06b6d4",
+    description: "Futuristic vector retrieval and high-velocity computing",
+  },
+  {
     id: "emerald",
     name: "Emerald Green",
     hex: "#10b981",
@@ -30,25 +48,13 @@ export const ACCENT_PRESETS: AccentPreset[] = [
   },
   {
     id: "crimson",
-    name: "Crimson",
+    name: "Crimson Rose",
     hex: "#e11d48",
     description: "Vibrant high-priority alerts and energetic execution",
   },
-  {
-    id: "amber",
-    name: "Amber Gold",
-    hex: "#f59e0b",
-    description: "Warm cognitive sunlight and executive leadership sheen",
-  },
-  {
-    id: "teal",
-    name: "Electric Teal",
-    hex: "#06b6d4",
-    description: "Futuristic vector retrieval and high-velocity computing",
-  },
 ];
 
-export const DEFAULT_ACCENT = "#6366f1"; // Indigo default
+export const DEFAULT_ACCENT = "#f59e0b"; // Warm Imperial Gold default translucent accent
 
 interface AccentContextType {
   accentColor: string;
@@ -108,14 +114,16 @@ export function applyAccentToCss(hex: string) {
 
   const root = document.documentElement;
   const hoverHex = adjustBrightness(rgb, 0.85);
-  const textTint = adjustBrightness(rgb, 1.4);
+  const luminance = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+  const textTint = luminance > 190 ? "#ffffff" : adjustBrightness(rgb, 1.4);
 
   root.style.setProperty("--accent-color", hex);
   root.style.setProperty("--accent-hover", hoverHex);
-  root.style.setProperty("--accent-subtle", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15)`);
-  root.style.setProperty("--accent-border", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.35)`);
-  root.style.setProperty("--accent-glow", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.35)`);
-  root.style.setProperty("--accent-ring", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`);
+  root.style.setProperty("--accent-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
+  root.style.setProperty("--accent-subtle", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.16)`);
+  root.style.setProperty("--accent-border", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.38)`);
+  root.style.setProperty("--accent-glow", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.45)`);
+  root.style.setProperty("--accent-ring", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55)`);
   root.style.setProperty("--accent-text", textTint);
 
   window.dispatchEvent(

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Profile Avatar Component Demo</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    body {
+      background: #09090b;
+      color: #ededed;
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .demo-card {
+      background: #121217;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 36px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      width: 100%;
+      max-width: 400px;
+    }
+
+    .demo-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 16px 0 4px 0;
+    }
+
+    .demo-subtitle {
+      font-size: 13px;
+      color: #a1a1aa;
+      margin: 0 0 16px 0;
+    }
+
+    .demo-badge {
+      font-family: monospace;
+      font-size: 11px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #fde68a;
+      padding: 4px 10px;
+      border-radius: 9999px;
+    }
+
+    .callback-output {
+      margin-top: 24px;
+      padding: 12px 16px;
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #10b981;
+      width: 100%;
+      text-align: left;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="demo-card">
+    <!-- Component Mount Target -->
+    <div id="userAvatarContainer"></div>
+
+    <h2 class="demo-title">Marcus Vance</h2>
+    <p class="demo-subtitle">Product & Delivery Lead</p>
+    <span class="demo-badge" id="activeAvatarTag">avatar-1.png</span>
+
+    <pre class="callback-output" id="callbackDisplay">// Callback log: Waiting for avatar change...</pre>
+  </div>
+
+  <script src="./avatar.js"></script>
+  <script>
+    // Initialize the Owl Profile Avatar Component
+    const picker = new OwlAvatarPicker({
+      container: '#userAvatarContainer',
+      basePath: '../assets/avatars/',
+      initialAvatar: 'avatar-1.png',
+      avatarCount: 12,
+      onSave: (data) => {
+        document.getElementById('activeAvatarTag').textContent = data.avatar;
+        document.getElementById('callbackDisplay').textContent = 
+          '// Callback triggered:\n' + JSON.stringify(data, null, 2);
+      }
+    });
+  </script>
+</body>
+</html>

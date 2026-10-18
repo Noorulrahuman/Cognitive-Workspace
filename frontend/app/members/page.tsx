@@ -5,20 +5,29 @@ import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/components/AuthProvider";
 import { useAccent } from "@/components/AccentColorProvider";
+import { useUserAvatar } from "@/components/UserAvatarProvider";
 import {
   Member,
   MemberRoleType,
   SystemRole,
   fetchWorkspaceMembers,
   addWorkspaceMember,
+  deleteWorkspaceMember,
   updateUserRole,
+  updateMemberAvatar,
+  updateMemberBasicDetails,
   syncCurrentUserToMembers,
   simulateNewUserSignIn,
+  isDefaultAdmin,
+  canManageRoles,
   fetchWorkspaceTasks,
   Task,
   STAGE_CONFIG,
   PRIORITY_CONFIG,
 } from "@/utils/workspaceData";
+import { CuteOwlAvatar } from "@/components/CuteOwlAvatar";
+import { OwlAvatarPicker } from "@/components/OwlAvatarPicker";
+import { OwlLoader } from "@/components/OwlLoader";
 
 function formatDate(iso?: string | null): string {
   if (!iso) return "N/A";
@@ -46,25 +55,25 @@ const ROLE_CONFIG: Record<
     label: "Admin",
     badge: "border-amber-500/30 bg-amber-500/10 text-amber-300 font-semibold",
     icon: "👑",
-    desc: "Full administrative controls and role privilege assignment",
+    desc: "Full administrative controls, project/story orchestration, and role assignment",
   },
-  Editor: {
-    label: "Editor",
+  Manager: {
+    label: "Manager",
+    badge: "border-purple-500/30 bg-purple-500/10 text-purple-300 font-semibold",
+    icon: "💼",
+    desc: "Can create projects, stories, and tasks across team pipelines",
+  },
+  Developer: {
+    label: "Developer",
     badge: "border-sky-500/30 bg-sky-500/10 text-sky-300 font-semibold",
-    icon: "✏️",
-    desc: "Can edit tasks, prompt graphs, and document schemas",
-  },
-  Member: {
-    label: "Member",
-    badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-semibold",
-    icon: "👥",
-    desc: "Collaborates on project tasks and pipeline executions",
+    icon: "💻",
+    desc: "Can view projects & stories, add tasks, and execute engineering workflows",
   },
   Viewer: {
     label: "Viewer",
     badge: "border-zinc-700 bg-zinc-800 text-zinc-300",
     icon: "👁️",
-    desc: "Read-only access to workspaces and vector evidence",
+    desc: "Read-only access to view projects, stories, tasks, and members",
   },
 };
 
@@ -81,14 +90,30 @@ export default function MembersPage() {
   const [roleFilter, setRoleFilter] = useState<"all" | SystemRole | "manager" | "developer">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Master-Detail Side Drawer State (Task 1)
+  // Master-Detail Side Drawer State
   const [activeMember, setActiveMember] = useState<Member | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [drawerTab, setDrawerTab] = useState<"overview" | "tasks" | "activity">("overview");
 
-  // Role Assignment State (Task 4)
+  // Profile Details Edit State
+  const [isEditingDetails, setIsEditingDetails] = useState<boolean>(false);
+  const [detailsForm, setDetailsForm] = useState({
+    name: "",
+    role_title: "",
+    department: "",
+    skills: "",
+    bio: "",
+  });
+  const [savingDetails, setSavingDetails] = useState<boolean>(false);
+
+  // Role Assignment State
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
   const [roleChangeNotice, setRoleChangeNotice] = useState<string | null>(null);
+
+  // Avatar Picker State & Global Synchronization
+  const { avatarId: currentUserAvatar, setAvatarId: setCurrentUserAvatar } = useUserAvatar();
+  const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState<boolean>(false);
+  const [avatarPickerTarget, setAvatarPickerTarget] = useState<"current_user" | "drawer_member">("current_user");
 
   // Modals & User Feedback
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -100,17 +125,55 @@ export default function MembersPage() {
     name: "",
     email: "",
     role_type: "developer" as MemberRoleType,
-    system_role: "Member" as SystemRole,
+    system_role: "Developer" as SystemRole,
     role_title: "",
     department: "Engineering",
     skills: "",
     bio: "",
     avatar_color: "from-blue-600 to-cyan-500",
+    owl_avatar: "avatar-1",
   });
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleAvatarSelect = async (newOwlId: string) => {
+    if (avatarPickerTarget === "current_user") {
+      setCurrentUserAvatar(newOwlId);
+      if (authUser) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.email.toLowerCase() === authUser.email?.toLowerCase() || m.id === authUser.id
+              ? { ...m, owl_avatar: newOwlId }
+              : m
+          )
+        );
+        const userMember = members.find(
+          (m) => m.email.toLowerCase() === authUser.email?.toLowerCase() || m.id === authUser.id
+        );
+        if (userMember) {
+          await updateMemberAvatar(userMember.id, newOwlId, supabase);
+        }
+      }
+      showToast("Updated your profile avatar! Active across all views.");
+    } else if (avatarPickerTarget === "drawer_member" && activeMember) {
+      const updated = await updateMemberAvatar(activeMember.id, newOwlId, supabase);
+      if (updated) {
+        setActiveMember(updated);
+        setMembers((prev) => prev.map((m) => (m.id === activeMember.id ? updated : m)));
+        if (
+          authUser &&
+          (activeMember.email.toLowerCase() === authUser.email?.toLowerCase() ||
+            activeMember.id === authUser.id)
+        ) {
+          setCurrentUserAvatar(newOwlId);
+        }
+        showToast(`Updated avatar for ${activeMember.name}`);
+      }
+    }
+    setIsAvatarPickerOpen(false);
   };
 
   // 1. Initial Load of Members & Tasks
@@ -139,6 +202,56 @@ export default function MembersPage() {
     }
   }, [authUser, members]);
 
+  // 3. Supabase Realtime Live Sync: Listen for remote INSERT, UPDATE, DELETE on public.members
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel("members-realtime-auth-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "members" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newMem = payload.new as Member;
+            setMembers((prev) => {
+              if (prev.some((m) => m.id === newMem.id || (m.email && m.email.toLowerCase() === newMem.email?.toLowerCase()))) {
+                return prev.map((m) =>
+                  m.id === newMem.id || (m.email && m.email.toLowerCase() === newMem.email?.toLowerCase())
+                    ? { ...m, ...newMem }
+                    : m
+                );
+              }
+              return [newMem, ...prev];
+            });
+            showToast(`New member "${newMem.name}" synchronized from Supabase Auth.`);
+          } else if (payload.eventType === "UPDATE") {
+            const updated = payload.new as Member;
+            setMembers((prev) => prev.map((m) => (m.id === updated.id ? { ...m, ...updated } : m)));
+            setActiveMember((curr) => (curr && curr.id === updated.id ? { ...curr, ...updated } : curr));
+          } else if (payload.eventType === "DELETE") {
+            const deletedId = (payload.old as any)?.id;
+            if (deletedId) {
+              setMembers((prev) => prev.filter((m) => m.id !== deletedId));
+              setActiveMember((curr) => {
+                if (curr && curr.id === deletedId) {
+                  setIsDrawerOpen(false);
+                  return null;
+                }
+                return curr;
+              });
+              showToast("Member removed from workspace and Supabase Auth.");
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
   // Keyboard shortcut: Escape closes drawer and modals
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -151,34 +264,99 @@ export default function MembersPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Derive current user member & permissions
+  const currentUserMember = useMemo(() => {
+    if (authUser?.email) {
+      return (
+        members.find(
+          (m) =>
+            (m.email && m.email.toLowerCase() === authUser.email?.toLowerCase()) ||
+            m.id === authUser.id
+        ) || null
+      );
+    }
+    // Fallback: Default to Rama Rao (Admin) or default admin if not logged in
+    return members.find((m) => isDefaultAdmin(m.name, m.email)) || members[0] || null;
+  }, [authUser, members]);
+
+  const currentUserRole: SystemRole = (currentUserMember?.system_role as SystemRole) || "Admin";
+  const isCurrentAdmin = currentUserRole === "Admin";
+
   // Open member details drawer
   const handleOpenDrawer = (member: Member) => {
     setActiveMember(member);
     setIsDrawerOpen(true);
     setDrawerTab("overview");
+    setIsEditingDetails(false);
+    setDetailsForm({
+      name: member.name,
+      role_title: member.role_title,
+      department: member.department,
+      skills: (member.skills || []).join(", "),
+      bio: member.bio || "",
+    });
   };
 
   // Close drawer
   const handleCloseDrawer = () => {
     setIsDrawerOpen(false);
+    setIsEditingDetails(false);
   };
 
-  // 3. Interactive Role Assignment (Task 4)
+  // Basic Profile Details Saving
+  const handleSaveDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeMember) return;
+    setSavingDetails(true);
+
+    try {
+      const skillsArr = detailsForm.skills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const updated = await updateMemberBasicDetails(
+        activeMember.id,
+        {
+          name: detailsForm.name,
+          role_title: detailsForm.role_title,
+          department: detailsForm.department,
+          bio: detailsForm.bio,
+          skills: skillsArr,
+        },
+        supabase
+      );
+
+      if (updated) {
+        setActiveMember(updated);
+        setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+        setIsEditingDetails(false);
+        showToast(`Profile details updated for ${updated.name}`);
+      }
+    } catch {
+      showToast("Error saving profile details");
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
+  // Interactive Role Assignment (Admins Only)
   const handleRoleChange = async (newRole: SystemRole) => {
     if (!activeMember) return;
+    if (!isCurrentAdmin) {
+      showToast("Only Workspace Admins can modify user roles.");
+      return;
+    }
     const memberId = activeMember.id;
     setUpdatingRoleId(memberId);
     setRoleChangeNotice(`Dispatching role change to ${newRole}...`);
 
     try {
-      // Mock network dispatch simulating PATCH /api/members/:id/role
-      const result = await updateUserRole(memberId, newRole);
+      const result = await updateUserRole(memberId, newRole, supabase);
 
       if (result.success && result.updatedMember) {
         const updated = result.updatedMember;
-        // Update local members list
         setMembers((prev) => prev.map((m) => (m.id === memberId ? updated : m)));
-        // Update active drawer state
         setActiveMember(updated);
         showToast(`Role for ${updated.name} updated to ${newRole}`);
         setRoleChangeNotice(`Successfully assigned ${newRole} privilege.`);
@@ -192,7 +370,7 @@ export default function MembersPage() {
     }
   };
 
-  // 4. Simulate New User Sign-In (Task 4)
+  // Simulate New User Sign-In
   const handleSimulateSignIn = () => {
     const newUser = simulateNewUserSignIn();
     setMembers((prev) => [newUser, ...prev]);
@@ -225,6 +403,7 @@ export default function MembersPage() {
               : "Software Developer"),
           department: formData.department.trim() || "Core Platform",
           avatar_color: formData.avatar_color,
+          owl_avatar: formData.owl_avatar || "owl-gold",
           status: "online",
           skills: skillsArray.length > 0 ? skillsArray : ["AI Systems", "TypeScript"],
           assigned_projects: ["Financial Document Intelligence"],
@@ -248,12 +427,13 @@ export default function MembersPage() {
         name: "",
         email: "",
         role_type: "developer",
-        system_role: "Member",
+        system_role: "Developer",
         role_title: "",
         department: "Engineering",
         skills: "",
         bio: "",
         avatar_color: "from-blue-600 to-cyan-500",
+        owl_avatar: "avatar-1",
       });
       showToast(`Member "${created.name}" added successfully.`);
       handleOpenDrawer(created);
@@ -327,16 +507,10 @@ export default function MembersPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
         <div>
           <div
-            className="inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-xs font-mono font-medium mb-2"
-            style={{
-              backgroundColor: "var(--accent-subtle)",
-              borderColor: "var(--accent-border)",
-              color: "var(--accent-text)",
-            }}
+            className="inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/90 px-3 py-0.5 text-xs font-mono font-medium mb-2 text-zinc-300"
           >
             <span
-              className="h-1.5 w-1.5 rounded-full animate-pulse"
-              style={{ backgroundColor: "var(--accent-color)" }}
+              className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"
             />
             <span>Workspace Talent Directory</span>
           </div>
@@ -385,20 +559,22 @@ export default function MembersPage() {
           <p className="mt-1 text-2xl font-bold text-white">{members.length}</p>
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-amber-400">Admins & Leaders</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-amber-400">Admins</p>
           <p className="mt-1 text-2xl font-bold text-amber-300">
-            {members.filter((m) => (m.system_role === "Admin" || m.role_type === "manager")).length}
+            {members.filter((m) => m.system_role === "Admin").length}
+          </p>
+        </div>
+        <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-purple-400">Managers</p>
+          <p className="mt-1 text-2xl font-bold text-purple-300">
+            {members.filter((m) => m.system_role === "Manager").length}
           </p>
         </div>
         <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-sky-400">Engineers & Editors</p>
+          <p className="text-[10px] font-mono uppercase tracking-wider text-sky-400">Developers & Viewers</p>
           <p className="mt-1 text-2xl font-bold text-sky-300">
-            {members.filter((m) => m.role_type === "developer" || m.system_role === "Editor").length}
+            {members.filter((m) => m.system_role === "Developer" || m.system_role === "Viewer").length}
           </p>
-        </div>
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-400">Assigned Tasks</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-300">{tasks.length}</p>
         </div>
       </div>
 
@@ -406,12 +582,12 @@ export default function MembersPage() {
       <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Role Filters */}
         <div className="flex items-center flex-wrap gap-1 rounded-xl border border-zinc-800 bg-zinc-900/80 p-1 text-xs">
-          {(["all", "Admin", "Editor", "Member", "Viewer"] as const).map((r) => {
+          {(["all", "Admin", "Manager", "Developer", "Viewer"] as const).map((r) => {
             const isSelected = roleFilter === r;
             const count =
               r === "all"
                 ? members.length
-                : members.filter((m) => (m.system_role || "Member") === r).length;
+                : members.filter((m) => (m.system_role || "Developer") === r).length;
 
             return (
               <button
@@ -465,15 +641,8 @@ export default function MembersPage() {
       {/* ============================================================ */}
       <div className="mt-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-            <div
-              className="h-8 w-8 rounded-full border-2 border-transparent animate-spin"
-              style={{
-                borderTopColor: "var(--accent-color)",
-                borderRightColor: "var(--accent-color)",
-              }}
-            />
-            <p className="mt-3 text-xs font-mono">Loading talent directory...</p>
+          <div className="py-16">
+            <OwlLoader text="Buffering workspace talent roster..." size="md" />
           </div>
         ) : filteredMembers.length === 0 ? (
           <div className="p-12 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 text-center text-xs text-zinc-500">
@@ -500,8 +669,10 @@ export default function MembersPage() {
                     const activeTasksCount = assignedTasks.filter(
                       (t) => t.stage === "in_progress"
                     ).length;
-                    const systemRole = member.system_role || "Member";
-                    const roleConfig = ROLE_CONFIG[systemRole] || ROLE_CONFIG.Member;
+                    const systemRole: SystemRole =
+                      (member.system_role as SystemRole) ||
+                      (member.role_type === "manager" ? "Manager" : "Developer");
+                    const roleConfig = ROLE_CONFIG[systemRole] || ROLE_CONFIG.Developer;
                     const isSelected = activeMember?.id === member.id && isDrawerOpen;
 
                     return (
@@ -514,39 +685,54 @@ export default function MembersPage() {
                             : "hover:bg-zinc-850/50"
                         }`}
                       >
-                        {/* 1. Name & Avatar */}
+                        {/* 1. Name & Owl Avatar */}
                         <td className="py-3.5 px-4 sm:px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="relative">
-                              <div
-                                className={`h-10 w-10 shrink-0 rounded-xl bg-linear-to-tr ${member.avatar_color} flex items-center justify-center text-xs font-bold text-white shadow-xs group-hover:scale-105 transition-transform`}
-                              >
-                                {member.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </div>
-                              <span
-                                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 ${
-                                  member.status === "online"
-                                    ? "bg-emerald-400"
-                                    : member.status === "away"
-                                    ? "bg-amber-400"
-                                    : "bg-zinc-500"
-                                }`}
-                                title={`Status: ${member.status}`}
-                              />
-                            </div>
+                          {(() => {
+                            const isCurrentUser =
+                              authUser &&
+                              (member.email.toLowerCase() === authUser.email?.toLowerCase() || member.id === authUser.id);
+                            const displayedAvatar = isCurrentUser ? currentUserAvatar : (member.owl_avatar || "avatar-1");
 
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-white group-hover:text-[var(--accent-text)] transition-colors truncate">
-                                {member.name}
-                              </p>
-                              <p className="text-[11px] text-zinc-400 font-mono truncate">
-                                {member.email}
-                              </p>
-                            </div>
-                          </div>
+                            return (
+                              <div className="flex items-center gap-3">
+                                <div className="relative shrink-0">
+                                  <div className="group-hover:scale-105 transition-transform">
+                                    <CuteOwlAvatar
+                                      owlId={displayedAvatar}
+                                      name={member.name}
+                                      size="md"
+                                    />
+                                  </div>
+                                  <span
+                                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 ${
+                                      member.status === "online"
+                                        ? "bg-emerald-400"
+                                        : member.status === "away"
+                                        ? "bg-amber-400"
+                                        : "bg-zinc-500"
+                                    }`}
+                                    title={`Status: ${member.status}`}
+                                  />
+                                </div>
+
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <p className="text-xs font-bold text-white group-hover:text-[var(--accent-text)] transition-colors truncate">
+                                      {member.name}
+                                    </p>
+                                    {isCurrentUser && (
+                                      <span className="text-[9px] font-mono px-1.5 py-0.2 rounded font-semibold border border-zinc-700 bg-zinc-800 text-zinc-300">
+                                        You
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-zinc-400 font-mono truncate">
+                                    {member.email}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 2. System Role Badge */}
@@ -627,15 +813,34 @@ export default function MembersPage() {
               <div className="p-6 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3.5">
-                    {/* Avatar */}
-                    <div className="relative">
-                      <div
-                        className={`h-14 w-14 rounded-2xl bg-linear-to-tr ${activeMember?.avatar_color} flex items-center justify-center text-base font-bold text-white shadow-md`}
-                      >
-                        {activeMember?.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
+                    {/* Owl Avatar */}
+                    <div
+                      onClick={() => {
+                        setAvatarPickerTarget("drawer_member");
+                        setIsAvatarPickerOpen(true);
+                      }}
+                      className="relative shrink-0 group cursor-pointer"
+                      title="Click to change this member's owl avatar"
+                    >
+                      <div className="group-hover:scale-105 transition-transform">
+                        <CuteOwlAvatar
+                          owlId={
+                            authUser &&
+                            (activeMember?.email.toLowerCase() === authUser.email?.toLowerCase() ||
+                              activeMember?.id === authUser.id)
+                              ? currentUserAvatar
+                              : activeMember?.owl_avatar
+                          }
+                          name={activeMember?.name}
+                          size="xl"
+                        />
+                      </div>
+                      <div className="absolute inset-0 rounded-full bg-black/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity backdrop-blur-[1px]">
+                        <svg className="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="text-[9px] font-bold uppercase tracking-wider">Change</span>
                       </div>
                       <span
                         className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-zinc-950 ${
@@ -661,6 +866,26 @@ export default function MembersPage() {
                       <p className="text-xs text-zinc-300 mt-0.5">
                         {activeMember?.role_title} &bull; {activeMember?.department}
                       </p>
+
+                      {/* Avatar Change Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAvatarPickerTarget("drawer_member");
+                          setIsAvatarPickerOpen(true);
+                        }}
+                        style={{
+                          backgroundColor: "var(--accent-subtle)",
+                          borderColor: "var(--accent-border)",
+                          color: "var(--accent-text)",
+                        }}
+                        className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold hover:opacity-90 active:scale-95 transition cursor-pointer shadow-sm"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                        <span>Change Avatar</span>
+                      </button>
                     </div>
                   </div>
 
@@ -678,7 +903,7 @@ export default function MembersPage() {
                 </div>
 
                 {/* ============================================================ */}
-                {/* TASK 4: INTERACTIVE ROLE ASSIGNMENT DROPDOWN & STATUS */}
+                {/* ROLE ASSIGNMENT DROPDOWN & PRIVILEGES */}
                 {/* ============================================================ */}
                 <div className="mt-5 p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/70">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -690,7 +915,7 @@ export default function MembersPage() {
                         Assign System Role & Privileges
                       </label>
                       <p className="text-[11px] text-zinc-400">
-                        {activeMember ? ROLE_CONFIG[activeMember.system_role || "Member"].desc : ""}
+                        {activeMember ? ROLE_CONFIG[activeMember.system_role || "Developer"].desc : ""}
                       </p>
                     </div>
 
@@ -706,18 +931,29 @@ export default function MembersPage() {
                       )}
                       <select
                         id="role-assignment-select"
-                        value={activeMember?.system_role || "Member"}
-                        disabled={updatingRoleId !== null}
+                        value={activeMember?.system_role || "Developer"}
+                        disabled={!isCurrentAdmin || updatingRoleId !== null}
                         onChange={(e) => handleRoleChange(e.target.value as SystemRole)}
-                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white focus:border-[var(--accent-color)] focus:outline-none cursor-pointer"
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium focus:border-[var(--accent-color)] focus:outline-none ${
+                          isCurrentAdmin
+                            ? "border-zinc-700 bg-zinc-900 text-white cursor-pointer"
+                            : "border-zinc-800 bg-zinc-950 text-zinc-500 cursor-not-allowed opacity-80"
+                        }`}
                       >
                         <option value="Admin">👑 Admin</option>
-                        <option value="Editor">✏️ Editor</option>
-                        <option value="Member">👥 Member</option>
+                        <option value="Manager">💼 Manager</option>
+                        <option value="Developer">💻 Developer</option>
                         <option value="Viewer">👁️ Viewer</option>
                       </select>
                     </div>
                   </div>
+
+                  {!isCurrentAdmin && (
+                    <p className="mt-2 text-[10px] font-mono text-amber-400/90 flex items-center gap-1.5">
+                      <span>🔒</span>
+                      <span>Role modification restricted to Workspace Admins. You can change your avatar and details below.</span>
+                    </p>
+                  )}
 
                   {roleChangeNotice && (
                     <p className="mt-2 text-[11px] font-mono text-emerald-400">
@@ -771,64 +1007,171 @@ export default function MembersPage() {
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 {drawerTab === "overview" && activeMember && (
                   <div className="space-y-6 animate-fade-in">
-                    {/* Bio / About */}
-                    <div>
-                      <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
-                        About & Domain Focus
-                      </h3>
-                      <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-xs text-zinc-300 leading-relaxed">
-                        {activeMember.bio || "No extended biography provided for this member."}
-                      </div>
+                    {/* Header with Edit Button */}
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                      <span className="text-xs font-mono uppercase tracking-wider text-zinc-400">
+                        Profile & Core Information
+                      </span>
+                      {(isCurrentAdmin || (currentUserMember && currentUserMember.id === activeMember.id)) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isEditingDetails) {
+                              setDetailsForm({
+                                name: activeMember.name,
+                                role_title: activeMember.role_title,
+                                department: activeMember.department,
+                                skills: (activeMember.skills || []).join(", "),
+                                bio: activeMember.bio || "",
+                              });
+                            }
+                            setIsEditingDetails(!isEditingDetails);
+                          }}
+                          className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-zinc-200 transition cursor-pointer flex items-center gap-1.5"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          <span>{isEditingDetails ? "Cancel Editing" : "Edit Basic Details"}</span>
+                        </button>
+                      )}
                     </div>
 
-                    {/* Metadata Grid */}
-                    <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
-                        <span className="text-zinc-500 text-[10px] block">Joined Date</span>
-                        <span className="text-zinc-200 font-semibold mt-0.5 block">
-                          {formatDate(activeMember.joined_date || activeMember.created_at)}
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
-                        <span className="text-zinc-500 text-[10px] block">Role Classification</span>
-                        <span className="text-zinc-200 font-semibold mt-0.5 block capitalize">
-                          {activeMember.role_type}
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
-                        <span className="text-zinc-500 text-[10px] block">Department</span>
-                        <span className="text-zinc-200 font-semibold mt-0.5 block">
-                          {activeMember.department}
-                        </span>
-                      </div>
-                      <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
-                        <span className="text-zinc-500 text-[10px] block">Member Identifier</span>
-                        <span className="text-zinc-200 font-semibold mt-0.5 block truncate">
-                          {activeMember.id}
-                        </span>
-                      </div>
-                    </div>
+                    {isEditingDetails ? (
+                      <form onSubmit={handleSaveDetails} className="space-y-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/80">
+                        <div>
+                          <label className="block text-[11px] font-mono text-zinc-400 mb-1">Full Name</label>
+                          <input
+                            type="text"
+                            required
+                            value={detailsForm.name}
+                            onChange={(e) => setDetailsForm({ ...detailsForm, name: e.target.value })}
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-mono text-zinc-400 mb-1">Role Title</label>
+                            <input
+                              type="text"
+                              required
+                              value={detailsForm.role_title}
+                              onChange={(e) => setDetailsForm({ ...detailsForm, role_title: e.target.value })}
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-mono text-zinc-400 mb-1">Department</label>
+                            <input
+                              type="text"
+                              required
+                              value={detailsForm.department}
+                              onChange={(e) => setDetailsForm({ ...detailsForm, department: e.target.value })}
+                              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-mono text-zinc-400 mb-1">Skills (comma-separated)</label>
+                          <input
+                            type="text"
+                            value={detailsForm.skills}
+                            onChange={(e) => setDetailsForm({ ...detailsForm, skills: e.target.value })}
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-mono text-zinc-400 mb-1">Bio / Domain Focus</label>
+                          <textarea
+                            rows={3}
+                            value={detailsForm.bio}
+                            onChange={(e) => setDetailsForm({ ...detailsForm, bio: e.target.value })}
+                            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none resize-none"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingDetails(false)}
+                            className="px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-900 text-xs text-zinc-300 hover:text-white"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={savingDetails}
+                            style={{
+                              backgroundColor: "var(--accent-color)",
+                              boxShadow: "0 2px 8px var(--accent-glow)",
+                            }}
+                            className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90 active:scale-95 disabled:opacity-50"
+                          >
+                            {savingDetails ? "Saving..." : "Save Details"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        {/* Bio / About */}
+                        <div>
+                          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
+                            About & Domain Focus
+                          </h3>
+                          <div className="p-4 rounded-xl border border-zinc-800/80 bg-zinc-950/60 text-xs text-zinc-300 leading-relaxed">
+                            {activeMember.bio || "No extended biography provided for this member."}
+                          </div>
+                        </div>
 
-                    {/* Skills & Domain Competencies */}
-                    <div>
-                      <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
-                        Core Competencies & Toolchains
-                      </h3>
-                      <div className="flex flex-wrap gap-1.5">
-                        {activeMember.skills && activeMember.skills.length > 0 ? (
-                          activeMember.skills.map((skill) => (
-                            <span
-                              key={skill}
-                              className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950/70 text-xs font-mono text-zinc-300"
-                            >
-                              {skill}
+                        {/* Metadata Grid */}
+                        <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                          <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                            <span className="text-zinc-500 text-[10px] block">Joined Date</span>
+                            <span className="text-zinc-200 font-semibold mt-0.5 block">
+                              {formatDate(activeMember.joined_date || activeMember.created_at)}
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-zinc-500 font-mono">No skills listed.</span>
-                        )}
-                      </div>
-                    </div>
+                          </div>
+                          <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                            <span className="text-zinc-500 text-[10px] block">Role Classification</span>
+                            <span className="text-zinc-200 font-semibold mt-0.5 block capitalize">
+                              {activeMember.role_type}
+                            </span>
+                          </div>
+                          <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                            <span className="text-zinc-500 text-[10px] block">Department</span>
+                            <span className="text-zinc-200 font-semibold mt-0.5 block">
+                              {activeMember.department}
+                            </span>
+                          </div>
+                          <div className="p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-950/60">
+                            <span className="text-zinc-500 text-[10px] block">Member Identifier</span>
+                            <span className="text-zinc-200 font-semibold mt-0.5 block truncate">
+                              {activeMember.id}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Skills & Domain Competencies */}
+                        <div>
+                          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-400 mb-2">
+                            Core Competencies & Toolchains
+                          </h3>
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeMember.skills && activeMember.skills.length > 0 ? (
+                              activeMember.skills.map((skill) => (
+                                <span
+                                  key={skill}
+                                  className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950/70 text-xs font-mono text-zinc-300"
+                                >
+                                  {skill}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-zinc-500 font-mono">No skills listed.</span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
 
                     {/* Assigned Projects */}
                     <div>
@@ -858,6 +1201,35 @@ export default function MembersPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Admin Actions: Remove Member */}
+                    {isCurrentAdmin && activeMember.id !== currentUserMember?.id && (
+                      <div className="pt-4 border-t border-zinc-800/80">
+                        <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold text-rose-300">Remove from Workspace</p>
+                            <p className="text-[10px] text-zinc-400 mt-0.5">
+                              Removes this member from the workspace roster and synchronizes deletion with Supabase Auth.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (window.confirm(`Are you sure you want to remove "${activeMember.name}" from the workspace directory and Supabase?`)) {
+                                await deleteWorkspaceMember(activeMember.id, supabase);
+                                setMembers((prev) => prev.filter((m) => m.id !== activeMember.id));
+                                setIsDrawerOpen(false);
+                                setActiveMember(null);
+                                showToast(`Removed "${activeMember.name}" from workspace.`);
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/20 text-xs font-semibold text-rose-300 hover:bg-rose-500/30 transition active:scale-95 shrink-0"
+                          >
+                            Remove Member
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1023,6 +1395,12 @@ export default function MembersPage() {
             </div>
 
             <form onSubmit={handleAddMember} className="mt-5 space-y-4">
+              {/* Cute Owl Avatar Selection */}
+              <OwlAvatarPicker
+                selected={formData.owl_avatar}
+                onSelect={(id) => setFormData({ ...formData, owl_avatar: id })}
+              />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
@@ -1066,8 +1444,8 @@ export default function MembersPage() {
                     className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
                   >
                     <option value="Admin">👑 Admin</option>
-                    <option value="Editor">✏️ Editor</option>
-                    <option value="Member">👥 Member</option>
+                    <option value="Manager">💼 Manager</option>
+                    <option value="Developer">💻 Developer</option>
                     <option value="Viewer">👁️ Viewer</option>
                   </select>
                 </div>
@@ -1141,6 +1519,35 @@ export default function MembersPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Assigned Owl Avatar
+                </label>
+                <div className="flex items-center gap-3">
+                  <div className="shrink-0 p-1 rounded-full border border-zinc-700 bg-black">
+                    <CuteOwlAvatar owlId={formData.owl_avatar} size="md" />
+                  </div>
+                  <select
+                    value={formData.owl_avatar}
+                    onChange={(e) => setFormData({ ...formData, owl_avatar: e.target.value })}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-[var(--accent-color)] focus:outline-none"
+                  >
+                    <option value="avatar-1">🦉 Avatar 1 - Classic Scholar</option>
+                    <option value="avatar-2">🦉 Avatar 2 - Detective Inspector</option>
+                    <option value="avatar-3">🦉 Avatar 3 - Spring Bonnet</option>
+                    <option value="avatar-4">🦉 Avatar 4 - Cool Shutter</option>
+                    <option value="avatar-5">🦉 Avatar 5 - Retro Afro</option>
+                    <option value="avatar-6">🦉 Avatar 6 - Pink Bow Lavender</option>
+                    <option value="avatar-7">🦉 Avatar 7 - Zombie Monster</option>
+                    <option value="avatar-8">🦉 Avatar 8 - Cybernetic Mecha</option>
+                    <option value="avatar-9">🦉 Avatar 9 - Pirate Buccaneer</option>
+                    <option value="avatar-10">🦉 Avatar 10 - Bandana Cowboy</option>
+                    <option value="avatar-11">🦉 Avatar 11 - Mystic Wizard</option>
+                    <option value="avatar-12">🦉 Avatar 12 - Flower Crown</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="pt-3 border-t border-zinc-800 flex items-center justify-end gap-3">
                 <button
                   type="button"
@@ -1165,6 +1572,24 @@ export default function MembersPage() {
           </div>
         </div>
       )}
+
+      {/* 12 Collectible Owl Avatar Picker Modal */}
+      <OwlAvatarPicker
+        isModal={true}
+        isOpen={isAvatarPickerOpen}
+        onClose={() => setIsAvatarPickerOpen(false)}
+        selectedOwlId={
+          activeMember
+            ? authUser &&
+              (activeMember.email.toLowerCase() === authUser.email?.toLowerCase() ||
+                activeMember.id === authUser.id)
+              ? currentUserAvatar
+              : activeMember.owl_avatar || "avatar-1"
+            : currentUserAvatar
+        }
+        onSelect={handleAvatarSelect}
+        title={activeMember ? `Choose Owl Avatar for ${activeMember.name}` : "Choose Your Profile Owl Avatar"}
+      />
     </div>
   );
 }

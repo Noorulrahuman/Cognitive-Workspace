@@ -52,3 +52,5 @@ def chat(req: ChatRequest) -> ChatResponse:
     except APIStatusError:
         raise HTTPException(status_code=502, detail="The AI service returned an error. Please try again.")
     return ChatResponse(reply=reply, session_id=session_id)
+
+app.include_router(api_router, prefix="/api/v1")
