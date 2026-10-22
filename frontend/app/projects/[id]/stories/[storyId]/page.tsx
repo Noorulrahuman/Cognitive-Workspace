@@ -165,12 +165,12 @@ function getDueChip(iso: string, stage: TaskStage): { text: string; style: strin
     };
   }
   if (days === 0) {
-    return { text: "Due today", style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+    return { text: "Due today", style: "border-orange-500/25 bg-orange-500/10 text-orange-300" };
   }
   if (days <= 3) {
     return {
       text: `Due in ${days} day${days === 1 ? "" : "s"}`,
-      style: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      style: "border-sky-500/25 bg-sky-500/10 text-sky-300",
     };
   }
   return {
@@ -666,7 +666,7 @@ export default function StoryTasksPage({
         </p>
         <Link
           href={`/projects/${encodeURIComponent(projectId)}/stories`}
-          className="mt-4 inline-block px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-xs font-semibold text-zinc-950 transition"
+          className="mt-4 inline-block px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95"
         >
           &larr; Return to Project Stories
         </Link>
@@ -678,25 +678,24 @@ export default function StoryTasksPage({
   const storyPriorityStyle = PRIORITY_CONFIG[story.priority];
 
   return (
-    <div className="flex-1 flex flex-col mx-auto w-full max-w-7xl px-4 sm:px-8 py-8 animate-fade-in">
+    <div className="relative flex-1 flex flex-col mx-auto w-full max-w-7xl px-4 sm:px-8 py-8 animate-fade-in">
+      {/* Ambient Executive Glow */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 h-72 w-full max-w-4xl bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)] blur-2xl -z-10" />
+
       {/* Toast Alert */}
       {toastMessage && (
         <div
           className={`fixed bottom-6 right-6 z-50 rounded-xl border px-4 py-2.5 text-xs shadow-2xl backdrop-blur-md animate-scale-up flex items-center gap-2 ${
             toastType === "error"
               ? "border-rose-500/40 bg-zinc-900/95 text-rose-200"
-              : toastType === "info"
-              ? "border-sky-500/40 bg-zinc-900/95 text-sky-200"
-              : "border-amber-500/40 bg-zinc-900/95 text-amber-200"
+              : "border-zinc-700 bg-zinc-900/95 text-zinc-200"
           }`}
         >
           <span
             className={`h-2 w-2 rounded-full ${
               toastType === "error"
                 ? "bg-rose-400"
-                : toastType === "info"
-                ? "bg-sky-400"
-                : "bg-amber-400 animate-pulse"
+                : "bg-emerald-400 animate-pulse"
             }`}
           />
           <span>{toastMessage}</span>
@@ -706,13 +705,13 @@ export default function StoryTasksPage({
       {/* ===== BREADCRUMB & BACK NAVIGATION ===== */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
         <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 flex-wrap">
-          <Link href="/projects" className="hover:text-amber-400 transition flex items-center gap-1">
+          <Link href="/projects" className="hover:text-zinc-200 transition flex items-center gap-1">
             <span>&larr; Projects</span>
           </Link>
           <span>/</span>
           <Link
             href={`/projects/${encodeURIComponent(project.id)}/stories`}
-            className="hover:text-amber-400 transition truncate max-w-[160px] sm:max-w-xs"
+            className="hover:text-zinc-200 transition truncate max-w-[160px] sm:max-w-xs"
           >
             {project.name}
           </Link>
@@ -721,7 +720,7 @@ export default function StoryTasksPage({
             {story.title}
           </span>
           <span>/</span>
-          <span className="text-amber-400 font-semibold">Story Tasks</span>
+          <span className="text-zinc-300 font-semibold">Story Tasks</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -744,16 +743,12 @@ export default function StoryTasksPage({
       </div>
 
       {/* ===== STORY CONTEXT BANNER (Parent of these Tasks) ===== */}
-      <div className="mt-6 rounded-3xl border border-zinc-800/90 bg-zinc-900/50 p-6 sm:p-8 backdrop-blur-md relative overflow-hidden shadow-xl">
-        <div
-          className="absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl pointer-events-none opacity-20"
-          style={{ backgroundColor: "var(--accent-color)" }}
-        />
+      <div className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8 relative overflow-hidden shadow-md">
 
         <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-bold border border-amber-500/30 bg-amber-500/10 text-amber-300">
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-bold border border-zinc-700/80 bg-zinc-850 text-zinc-300">
                 ACTIVE STORY
               </span>
               <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-mono border ${storyStatusStyle.badge}`}>
@@ -789,11 +784,7 @@ export default function StoryTasksPage({
             {canAddTask && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                style={{
-                  backgroundColor: "var(--accent-color)",
-                  boxShadow: "0 4px 16px var(--accent-glow)",
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-zinc-950 transition hover:opacity-95 hover:scale-[1.02] cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
               >
                 <span>+ Add Task</span>
               </button>
@@ -814,8 +805,7 @@ export default function StoryTasksPage({
                 {tasks.filter((t) => t.stage === "done").length} of {tasks.length} tasks completed
               </span>
               <span
-                className="font-bold text-sm"
-                style={{ color: "var(--accent-color)" }}
+                className="font-bold text-sm text-zinc-200"
               >
                 {storyProgress}%
               </span>
@@ -829,8 +819,7 @@ export default function StoryTasksPage({
                 background:
                   storyProgress === 100
                     ? "#10b981"
-                    : `linear-gradient(90deg, #f59e0b 0%, var(--accent-color) 100%)`,
-                boxShadow: "0 0 12px var(--accent-glow)",
+                    : `linear-gradient(90deg, rgba(255,255,255,0.7) 0%, var(--accent-color) 100%)`,
               }}
             />
           </div>
@@ -877,7 +866,7 @@ export default function StoryTasksPage({
               placeholder="Search tasks, assignees, paths..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-1.5 pl-9 text-xs text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-1.5 pl-9 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
             />
             <svg
               className="w-4 h-4 absolute left-3 top-2 text-zinc-500"
@@ -896,7 +885,7 @@ export default function StoryTasksPage({
           <select
             value={selectedStageFilter}
             onChange={(e) => setSelectedStageFilter(e.target.value)}
-            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 focus:border-amber-500 focus:outline-none cursor-pointer"
+            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
           >
             <option value="All">All Stages</option>
             <option value="todo">To Do</option>
@@ -909,7 +898,7 @@ export default function StoryTasksPage({
           <select
             value={selectedPriorityFilter}
             onChange={(e) => setSelectedPriorityFilter(e.target.value)}
-            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 focus:border-amber-500 focus:outline-none cursor-pointer"
+            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
           >
             <option value="All">All Priorities</option>
             <option value="urgent">Urgent</option>
@@ -922,7 +911,7 @@ export default function StoryTasksPage({
           <select
             value={selectedAssigneeFilter}
             onChange={(e) => setSelectedAssigneeFilter(e.target.value)}
-            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 focus:border-amber-500 focus:outline-none cursor-pointer"
+            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
           >
             <option value="All">All Assignees</option>
             {members.map((m) => (
@@ -936,11 +925,7 @@ export default function StoryTasksPage({
           {canAddTask && (
             <button
               onClick={() => setIsAddModalOpen(true)}
-              style={{
-                backgroundColor: "var(--accent-color)",
-                boxShadow: "0 4px 16px var(--accent-glow)",
-              }}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-zinc-950 transition hover:opacity-95 hover:scale-[1.02] cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
             >
               <span>+ Add Task</span>
             </button>
@@ -962,7 +947,7 @@ export default function StoryTasksPage({
             {canAddTask && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                className="mt-4 px-4 py-2 rounded-xl bg-amber-500 text-xs font-bold text-zinc-950 transition hover:bg-amber-400 cursor-pointer"
+                className="mt-4 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
               >
                 + Add First Task
               </button>
@@ -978,7 +963,7 @@ export default function StoryTasksPage({
               return (
                 <div
                   key={stage}
-                  className="flex flex-col rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-3.5 backdrop-blur-sm"
+                  className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/80 p-3.5"
                 >
                   {/* Column Header */}
                   <div className="flex items-center justify-between pb-3 border-b border-zinc-800/60 mb-3">
@@ -1009,7 +994,7 @@ export default function StoryTasksPage({
                           <div
                             key={task.id}
                             onClick={() => openTaskDetail(task)}
-                            className="group relative rounded-xl border border-zinc-800/80 bg-zinc-900/80 hover:bg-zinc-850/90 hover:border-amber-500/40 p-4 transition-all shadow-md cursor-pointer"
+                            className="group relative rounded-xl border border-zinc-800/80 bg-zinc-900/80 hover:bg-zinc-850/90 hover:border-zinc-700/90 p-4 transition-all shadow-md cursor-pointer"
                           >
                             {/* Card Top: Priority & Due Chip */}
                             <div className="flex items-center justify-between gap-2 mb-2">
@@ -1024,7 +1009,7 @@ export default function StoryTasksPage({
                             </div>
 
                             {/* Title */}
-                            <h4 className="text-xs font-bold text-white group-hover:text-amber-400 transition-colors line-clamp-2">
+                            <h4 className="text-xs font-bold text-white group-hover:text-zinc-100 transition-colors line-clamp-2">
                               {task.title}
                             </h4>
 
@@ -1142,7 +1127,7 @@ export default function StoryTasksPage({
                         className="hover:bg-zinc-850/50 transition cursor-pointer"
                       >
                         <td className="px-5 py-3.5">
-                          <p className="font-bold text-white hover:text-amber-400 transition">
+                          <p className="font-bold text-white hover:text-zinc-200 transition">
                             {task.title}
                           </p>
                           {task.description && (
@@ -1227,7 +1212,7 @@ export default function StoryTasksPage({
             {/* Drawer Header */}
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded text-[10px] font-mono border border-amber-500/30 bg-amber-500/10 text-amber-300 font-bold">
+                <span className="px-2.5 py-0.5 rounded text-[10px] font-mono border border-zinc-700 bg-zinc-800 text-zinc-300 font-semibold">
                   TASK DETAILS
                 </span>
                 <span className="text-xs text-zinc-400 font-mono">
@@ -1254,7 +1239,7 @@ export default function StoryTasksPage({
                   {!isViewer && (
                     <button
                       onClick={() => setIsEditingTaskInfo(!isEditingTaskInfo)}
-                      className="text-[11px] text-amber-400 hover:underline cursor-pointer"
+                      className="text-[11px] text-zinc-300 hover:text-white hover:underline cursor-pointer"
                     >
                       {isEditingTaskInfo ? "Cancel Editing" : "✎ Edit Details"}
                     </button>
@@ -1265,7 +1250,7 @@ export default function StoryTasksPage({
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 text-sm text-white focus:outline-none focus:border-amber-400"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 text-sm text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30"
                   />
                 ) : (
                   <h2 className="text-xl font-bold text-white leading-snug">{taskDetail.title}</h2>
@@ -1282,7 +1267,7 @@ export default function StoryTasksPage({
                     disabled={isViewer}
                     value={taskDetail.stage}
                     onChange={(e) => handleStageChange(taskDetail.id, e.target.value as TaskStage)}
-                    className={`w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 ${
+                    className={`w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 ${
                       isViewer ? "cursor-default opacity-80" : "cursor-pointer"
                     }`}
                   >
@@ -1301,7 +1286,7 @@ export default function StoryTasksPage({
                     <select
                       value={editPriority}
                       onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -1330,7 +1315,7 @@ export default function StoryTasksPage({
                     <select
                       value={editAssigneeId}
                       onChange={(e) => setEditAssigneeId(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                     >
                       <option value="">Unassigned</option>
                       {members.map((m) => (
@@ -1370,7 +1355,7 @@ export default function StoryTasksPage({
                       type="date"
                       value={editDueDate}
                       onChange={(e) => setEditDueDate(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                     />
                   ) : (
                     <div className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-900/60 text-xs font-mono text-zinc-300">
@@ -1391,7 +1376,7 @@ export default function StoryTasksPage({
                     value={editDescription}
                     onChange={(e) => setEditDescription(e.target.value)}
                     placeholder="Enter detailed task instructions..."
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 leading-relaxed"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 leading-relaxed"
                   />
                 ) : (
                   <div className="p-4 rounded-2xl border border-zinc-850 bg-zinc-900/40 text-xs text-zinc-300 leading-relaxed font-light whitespace-pre-wrap">
@@ -1411,7 +1396,7 @@ export default function StoryTasksPage({
                     value={editPathsText}
                     onChange={(e) => setEditPathsText(e.target.value)}
                     placeholder="One path per line, e.g.:&#10;rag-pipeline/extraction/parser.py&#10;docs/specs/api.json"
-                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30"
                   />
                 ) : (
                   <div className="space-y-1.5">
@@ -1458,7 +1443,7 @@ export default function StoryTasksPage({
                 {isEditingTaskInfo && !isViewer ? (
                   <button
                     onClick={handleSaveTaskDetails}
-                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 transition cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
                   >
                     Save Changes
                   </button>
@@ -1488,7 +1473,7 @@ export default function StoryTasksPage({
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div>
                 <h3 className="text-base font-bold text-white">+ Add Task to Story</h3>
-                <p className="text-[11px] font-mono text-amber-300 truncate max-w-sm mt-0.5">
+                <p className="text-[11px] font-mono text-zinc-400 truncate max-w-sm mt-0.5">
                   Story: {story.title}
                 </p>
               </div>
@@ -1511,7 +1496,7 @@ export default function StoryTasksPage({
                   placeholder="e.g. Implement LangGraph Checkpoint Persistence..."
                   value={newTaskForm.title}
                   onChange={(e) => setNewTaskForm({ ...newTaskForm, title: e.target.value })}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30"
                 />
               </div>
 
@@ -1522,7 +1507,7 @@ export default function StoryTasksPage({
                   placeholder="Describe task scope, requirements, or acceptance criteria..."
                   value={newTaskForm.description}
                   onChange={(e) => setNewTaskForm({ ...newTaskForm, description: e.target.value })}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 leading-relaxed"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 leading-relaxed"
                 />
               </div>
 
@@ -1534,7 +1519,7 @@ export default function StoryTasksPage({
                     onChange={(e) =>
                       setNewTaskForm({ ...newTaskForm, priority: e.target.value as TaskPriority })
                     }
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -1550,7 +1535,7 @@ export default function StoryTasksPage({
                     onChange={(e) =>
                       setNewTaskForm({ ...newTaskForm, stage: e.target.value as TaskStage })
                     }
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                   >
                     <option value="todo">To Do</option>
                     <option value="in_progress">In Progress</option>
@@ -1568,7 +1553,7 @@ export default function StoryTasksPage({
                     onChange={(e) =>
                       setNewTaskForm({ ...newTaskForm, assigned_to_id: e.target.value })
                     }
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                   >
                     <option value="">Unassigned</option>
                     {members.map((m) => (
@@ -1585,7 +1570,7 @@ export default function StoryTasksPage({
                     type="date"
                     value={newTaskForm.due_date}
                     onChange={(e) => setNewTaskForm({ ...newTaskForm, due_date: e.target.value })}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                   />
                 </div>
               </div>
@@ -1601,7 +1586,7 @@ export default function StoryTasksPage({
                   onChange={(e) =>
                     setNewTaskForm({ ...newTaskForm, descriptive_paths_text: e.target.value })
                   }
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30"
                 />
               </div>
 
@@ -1615,11 +1600,7 @@ export default function StoryTasksPage({
                 </button>
                 <button
                   type="submit"
-                  style={{
-                    backgroundColor: "var(--accent-color)",
-                    boxShadow: "0 4px 16px var(--accent-glow)",
-                  }}
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-zinc-950 transition hover:opacity-95 cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
                 >
                   Create Task
                 </button>
@@ -1658,7 +1639,7 @@ export default function StoryTasksPage({
                   required
                   value={editStoryTitle}
                   onChange={(e) => setEditStoryTitle(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30"
                 />
               </div>
 
@@ -1668,7 +1649,7 @@ export default function StoryTasksPage({
                   rows={3}
                   value={editStoryDescription}
                   onChange={(e) => setEditStoryDescription(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-400 leading-relaxed"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3.5 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 leading-relaxed"
                 />
               </div>
 
@@ -1680,7 +1661,7 @@ export default function StoryTasksPage({
                   <select
                     value={editStoryPriority}
                     onChange={(e) => setEditStoryPriority(e.target.value as StoryPriority)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -1694,7 +1675,7 @@ export default function StoryTasksPage({
                   <select
                     value={editStoryStatus}
                     onChange={(e) => setEditStoryStatus(e.target.value as StoryStatus)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                   >
                     <option value="open">Open</option>
                     <option value="in_progress">In Progress</option>
@@ -1712,7 +1693,7 @@ export default function StoryTasksPage({
                   type="date"
                   value={editStoryDueDate}
                   onChange={(e) => setEditStoryDueDate(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 cursor-pointer"
                 />
               </div>
 
@@ -1726,7 +1707,7 @@ export default function StoryTasksPage({
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 transition cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
                 >
                   Save Story
                 </button>
@@ -1761,7 +1742,7 @@ export default function StoryTasksPage({
             </div>
 
             <div className="mt-4 flex-1 overflow-y-auto">
-              <pre className="p-4 rounded-2xl border border-zinc-800 bg-zinc-900/90 text-[11px] font-mono text-amber-200 overflow-x-auto leading-relaxed">
+              <pre className="p-4 rounded-2xl border border-zinc-800 bg-zinc-900/90 text-[11px] font-mono text-zinc-300 overflow-x-auto leading-relaxed">
                 {SQL_SCHEMA_TEXT}
               </pre>
             </div>
@@ -1772,7 +1753,7 @@ export default function StoryTasksPage({
               </span>
               <button
                 onClick={handleCopySql}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
               >
                 {copiedSql ? "✓ Copied to Clipboard!" : "Copy SQL Script"}
               </button>

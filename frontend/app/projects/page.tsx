@@ -34,9 +34,11 @@ const isDatabaseProblem = (error: string) =>
 const PROJECT_COLORS = [
   "from-indigo-500 to-violet-500",
   "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
   "from-sky-500 to-cyan-500",
   "from-rose-500 to-pink-500",
+  "from-violet-500 to-purple-600",
+  "from-teal-500 to-emerald-600",
+  "from-blue-600 to-indigo-600",
   "from-fuchsia-500 to-purple-500",
 ];
 
@@ -87,10 +89,10 @@ function getDueChip(iso: string, stage: string): { text: string; style: string }
     return { text: `Overdue by ${-days} day${days === -1 ? "" : "s"}`, style: "border-rose-500/30 bg-rose-500/10 text-rose-300" };
   }
   if (days === 0) {
-    return { text: "Due today", style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+    return { text: "Due today", style: "border-orange-500/25 bg-orange-500/10 text-orange-300" };
   }
   if (days <= 3) {
-    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-sky-500/25 bg-sky-500/10 text-sky-300" };
   }
   return { text: `Due in ${days} days`, style: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" };
 }
@@ -201,7 +203,7 @@ CREATE TABLE IF NOT EXISTS public.members (
     role_type TEXT NOT NULL CHECK (role_type IN ('manager', 'developer')),
     role_title TEXT NOT NULL,
     department TEXT DEFAULT 'Engineering',
-    avatar_color TEXT DEFAULT 'from-blue-600 to-cyan-500',
+    avatar_color TEXT DEFAULT 'from-indigo-600 to-sky-700',
     status TEXT DEFAULT 'online',
     skills TEXT[] DEFAULT ARRAY[]::TEXT[],
     assigned_projects TEXT[] DEFAULT ARRAY[]::TEXT[],
@@ -893,38 +895,46 @@ export default function ProjectsPage() {
     );
   }, [projectDetail, tasks]);
 
+  const detailProjectStories = useMemo(() => {
+    if (!projectDetail) return [];
+    return stories.filter(
+      (s) => s.project_id === projectDetail.id || s.project_name === projectDetail.name
+    );
+  }, [projectDetail, stories]);
+
   return (
-    <div className="min-h-full py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
+    <div className="relative min-h-full py-8 px-4 sm:px-8 max-w-7xl mx-auto w-full">
+
       {/* Toast Notification */}
       {toastMessage && (
-      <div className={`fixed bottom-6 right-6 z-[60] flex items-center gap-3 bg-zinc-900 border px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md ${toastType === "error" ? "border-rose-500/40 text-rose-300" : "border-emerald-500/40 text-emerald-300"}`}>
-         <span className={`h-2 w-2 rounded-full animate-ping ${toastType === "error" ? "bg-rose-400" : "bg-emerald-400"}`} />
+      <div className={`fixed bottom-6 right-6 z-[60] flex items-center gap-3 bg-zinc-900 border px-4 py-3 rounded-xl shadow-2xl animate-fade-in backdrop-blur-md ${toastType === "error" ? "border-rose-500/40 text-rose-300" : "border-zinc-700 text-zinc-200"}`}>
+         <span className={`h-2 w-2 rounded-full animate-ping ${toastType === "error" ? "bg-rose-400" : "bg-zinc-400"}`} />
           <p className="text-sm font-medium">{toastMessage}</p>
         </div>
       )}
 
       {/* Supabase Notice Banner */}
       {supabaseNotice && (
-        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300">
           <div className="flex items-center gap-2.5">
-            <svg className="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-sky-400/80 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div className="text-xs">
-              <span className="font-semibold text-amber-100">Database problem:  </span>
+              <span className="font-semibold text-zinc-200">Database notice:  </span>
               {supabaseNotice}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setIsSqlModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer transition shadow-xs"
+              className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold cursor-pointer transition shadow-xs"
             >
               View SQL Schema
             </button>
             <button
               onClick={loadWorkspaceData}
-              className="px-3 py-1.5 rounded-lg border border-amber-500/30 text-amber-200 hover:bg-amber-500/20 text-xs font-semibold cursor-pointer transition"
+              className="px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs font-medium cursor-pointer transition"
             >
               Retry
             </button>
@@ -939,7 +949,7 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
               Projects
             </h1>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
+            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-0.5 text-xs font-medium text-zinc-300">
               {projects.length}
             </span>
             <span
@@ -949,7 +959,7 @@ export default function ProjectsPage() {
                   : "Working offline (saved in this browser only)"
               }
               className={`h-2 w-2 rounded-full ${
-                supabaseConnected === true ? "bg-emerald-400" : "bg-amber-400"
+                supabaseConnected === true ? "bg-emerald-400" : "bg-zinc-500"
               }`}
             />
             
@@ -966,7 +976,7 @@ export default function ProjectsPage() {
               title="Grid view"
               aria-label="Grid view"
               className={`p-1.5 rounded-lg transition cursor-pointer ${
-                viewMode === "grid" ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-200"
+                viewMode === "grid" ? "bg-zinc-800 text-white shadow-xs" : "text-zinc-500 hover:text-zinc-200"
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -978,7 +988,7 @@ export default function ProjectsPage() {
               title="List view"
               aria-label="List view"
               className={`p-1.5 rounded-lg transition cursor-pointer ${
-                viewMode === "list" ? "bg-zinc-700 text-white" : "text-zinc-500 hover:text-zinc-200"
+                viewMode === "list" ? "bg-zinc-800 text-white shadow-xs" : "text-zinc-500 hover:text-zinc-200"
               }`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -990,7 +1000,7 @@ export default function ProjectsPage() {
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
             aria-label="Sort projects"
-            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+            className="rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-xs text-white focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/30 focus:outline-none cursor-pointer"
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
@@ -1000,10 +1010,10 @@ export default function ProjectsPage() {
           {canCreateProject ? (
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
+              className="flex items-center gap-2 rounded-xl bg-zinc-100 hover:bg-white px-4 py-2 text-xs font-semibold text-zinc-950 shadow-sm transition cursor-pointer active:scale-95"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              <svg className="w-4 h-4 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
               </svg>
               <span>New Project</span>
             </button>
@@ -1018,33 +1028,34 @@ export default function ProjectsPage() {
           )}
         </div>
       </div>
+
       {/* NEW: stats row */}
       <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Projects</p>
           <p className="mt-1 text-2xl font-bold text-white">{projects.length}</p>
           <p className="mt-0.5 text-[11px] text-zinc-500">in your workspace</p>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Total tasks</p>
           <p className="mt-1 text-2xl font-bold text-white">{totalTasks}</p>
-          <p className="mt-0.5 text-[11px] text-amber-300/80">{activeTasks} in progress</p>
+          <p className="mt-0.5 text-[11px] text-sky-300/80">{activeTasks} in progress</p>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Completed</p>
           <p className="mt-1 text-2xl font-bold text-emerald-400">{completedPercent}%</p>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
             <div
-              className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
               style={{ width: `${completedPercent}%` }}
             />
           </div>
           <p className="mt-1 text-[11px] text-zinc-500">{doneTasks} of {totalTasks} tasks done</p>
         </div>
 
-        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Team members</p>
           <p className="mt-1 text-2xl font-bold text-white">{members.length}</p>
           <p className="mt-0.5 text-[11px] text-zinc-500">in the whole workspace</p>
@@ -1061,8 +1072,8 @@ export default function ProjectsPage() {
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
                 selectedCategory === cat
-                  ? "bg-zinc-800 text-white shadow-xs font-semibold"
-                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                  ? "bg-zinc-800 border border-zinc-700 text-zinc-100 font-semibold shadow-xs"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-transparent"
               }`}
             >
               {cat}
@@ -1077,7 +1088,7 @@ export default function ProjectsPage() {
             placeholder="Search projects & tags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-1.5 pl-9 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-1.5 pl-9 text-xs text-white placeholder-zinc-500 focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/30 focus:outline-none"
           />
           <svg className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1106,7 +1117,7 @@ export default function ProjectsPage() {
             {!searchQuery && selectedCategory === "All" && canCreateProject && (
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                className="mt-4 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white cursor-pointer"
+                className="mt-4 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
               >
                 + Create Project
               </button>
@@ -1135,7 +1146,7 @@ export default function ProjectsPage() {
                 <div
                   key={project.id}
                   onClick={() => router.push(`/projects/${encodeURIComponent(project.id)}/stories`)}
-                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-5 hover:border-amber-500/50 hover:bg-zinc-900/80 transition-all shadow-md cursor-pointer"
+                  className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800 bg-zinc-900 p-5 hover:border-zinc-700 hover:bg-zinc-850 transition-all shadow-md cursor-pointer"
                   title="Click to open project stories & tasks workspace"
                 >
                   <div>
@@ -1149,7 +1160,7 @@ export default function ProjectsPage() {
                         {getProjectInitial(project.name)}
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-block rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-mono font-medium text-amber-300">
+                        <span className="inline-block rounded-md border border-zinc-800 bg-zinc-950/70 px-2.5 py-0.5 text-[10px] font-mono font-medium text-zinc-300">
                           {project.category}
                         </span>
                         <button
@@ -1168,7 +1179,7 @@ export default function ProjectsPage() {
                     </div>
 
                     {/* Title & Description */}
-                    <h2 className="mt-4 text-base font-bold text-white group-hover:text-amber-400 transition-colors line-clamp-1">
+                    <h2 className="mt-4 text-base font-bold text-white group-hover:text-zinc-100 transition-colors line-clamp-1">
                       {project.name}
                     </h2>
                     <p className="mt-1.5 text-xs text-zinc-400 line-clamp-2 leading-relaxed">
@@ -1190,19 +1201,20 @@ export default function ProjectsPage() {
                       <Link
                         href={`/projects/${encodeURIComponent(project.id)}/stories`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/25 text-[11px] font-mono text-amber-300 transition"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-violet-500/20 bg-violet-500/10 hover:bg-violet-500/20 text-[11px] font-mono text-violet-300 transition"
                       >
                         <span>📖 {projectStories.length} {projectStories.length === 1 ? "story" : "stories"}</span>
                         <span>&rarr;</span>
                       </Link>
                       <Link
-                        href={`/projects/${encodeURIComponent(project.id)}/tasks`}
+                        href={`/projects/${encodeURIComponent(project.id)}/stories`}
                         onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/25 text-[11px] font-mono text-sky-300 transition"
+                        title="Enter stories to view and edit tasks"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-950/70 hover:bg-zinc-900 text-[11px] font-mono text-zinc-300 hover:text-white transition"
                       >
                         <span>📋 {projectTasks.length} {projectTasks.length === 1 ? "task" : "tasks"}</span>
                         {inProgressCount > 0 && (
-                          <span className="text-[10px] text-amber-300">({inProgressCount} active)</span>
+                          <span className="text-[10px] text-sky-300 font-medium">({inProgressCount} active)</span>
                         )}
                       </Link>
                     </div>
@@ -1211,7 +1223,7 @@ export default function ProjectsPage() {
                     <div className="mt-3.5">
                       <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500">
                         <span>Stories & Tasks Progress</span>
-                        <span className={progressPercent === 100 ? "text-emerald-400 font-bold" : "text-amber-300 font-semibold"}>
+                        <span className={progressPercent === 100 ? "text-emerald-400 font-bold" : "text-zinc-400 font-medium"}>
                           {projectStories.length === 0 && projectTasks.length === 0
                             ? "No backlog"
                             : `${progressPercent}%`}
@@ -1222,7 +1234,7 @@ export default function ProjectsPage() {
                           className={`h-full rounded-full transition-all duration-500 ${
                             progressPercent === 100
                               ? "bg-emerald-400"
-                              : "bg-linear-to-r from-amber-500 to-yellow-400"
+                              : "bg-zinc-400/80"
                           }`}
                           style={{ width: `${progressPercent}%` }}
                         />
@@ -1296,7 +1308,7 @@ export default function ProjectsPage() {
                       {/* Renamed Copilot to Gemini */}
                       <Link
                         href={`/chat?project=${encodeURIComponent(project.name)}`}
-                        className="px-2.5 py-1 text-xs font-semibold rounded bg-zinc-800 hover:bg-indigo-600 text-zinc-300 hover:text-white transition-colors"
+                        className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
                         title="Open in AI Gemini"
                         onClick={(e) => e.stopPropagation()}
                       >
@@ -1310,7 +1322,7 @@ export default function ProjectsPage() {
                             e.stopPropagation();
                             openEditModal(project);
                           }}
-                          className="p-1 rounded text-zinc-500 hover:text-indigo-400 hover:bg-indigo-950/40 transition cursor-pointer"
+                          className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition cursor-pointer"
                           title="Edit Project"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1361,7 +1373,7 @@ export default function ProjectsPage() {
             {/* Top row */}
             <div className="flex items-start justify-between gap-3 pb-4 border-b border-zinc-800">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-block rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+                <span className="inline-block rounded-md border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-[10px] font-mono font-medium text-zinc-400">
                   {projectDetail.category}
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
@@ -1400,201 +1412,29 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-            {/* ============================================================ */}
-            {/* TASKS SECTION FOR THIS PROJECT */}
-            {/* ============================================================ */}
-            <div className="mt-6 pt-5 border-t border-zinc-800">
-              <div className="flex items-center justify-between pb-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Project Tasks ({detailProjectTasks.length})
-                  </h3>
-                  <span className="text-[10px] font-mono text-zinc-500">Milestones & Stages</span>
+            {/* Stories & Hierarchy Section */}
+            <div className="mt-6 p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-lg">
+                  📖
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {!isViewer ? (
-                    <button
-                      onClick={() => setIsInlineAddTaskOpen(!isInlineAddTaskOpen)}
-                      className="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white text-xs font-semibold transition cursor-pointer"
-                    >
-                      {isInlineAddTaskOpen ? "Close Form" : "+ Add Task"}
-                    </button>
-                  ) : (
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-zinc-800 text-zinc-400">
-                      👁️ Viewer Mode
-                    </span>
-                  )}
-                  <Link
-                    href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
-                    className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition"
-                  >
-                    Open Project Tasks &rarr;
-                  </Link>
+                <div>
+                  <h3 className="text-xs font-bold text-white">Project Stories & Tasks</h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    {detailProjectStories.length} {detailProjectStories.length === 1 ? "story" : "stories"} &bull; {detailProjectTasks.length} {detailProjectTasks.length === 1 ? "task" : "tasks"}
+                  </p>
+                  <p className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+                    Enter stories to add, view, and edit tasks
+                  </p>
                 </div>
               </div>
-
-              {/* Inline Add Task Form */}
-              {isInlineAddTaskOpen && (
-                <form
-                  onSubmit={handleInlineAddTask}
-                  className="mb-4 p-4 rounded-xl border border-indigo-500/30 bg-zinc-950/80 space-y-3 animate-scale-up"
-                >
-                  <p className="text-xs font-bold text-indigo-300">
-                    Add New Task to {projectDetail.name}
-                  </p>
-                  <div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Task Title (e.g. Ingest 10-K tables via PyMuPDF)..."
-                      value={inlineTaskForm.title}
-                      onChange={(e) => setInlineTaskForm({ ...inlineTaskForm, title: e.target.value })}
-                      className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {/* Assignee */}
-                    <div>
-                      <select
-                        value={inlineTaskForm.assigned_to_id}
-                        onChange={(e) =>
-                          setInlineTaskForm({ ...inlineTaskForm, assigned_to_id: e.target.value })
-                        }
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
-                      >
-                        <option value="">Unassigned</option>
-                        <optgroup label="👑 Managers">
-                          {members
-                            .filter((m) => m.role_type === "manager")
-                            .map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name} (Manager)
-                              </option>
-                            ))}
-                        </optgroup>
-                        <optgroup label="⚡ Developers">
-                          {members
-                            .filter((m) => m.role_type === "developer")
-                            .map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name} (Developer)
-                              </option>
-                            ))}
-                        </optgroup>
-                      </select>
-                    </div>
-
-                    {/* Priority */}
-                    <div>
-                      <select
-                        value={inlineTaskForm.priority}
-                        onChange={(e) =>
-                          setInlineTaskForm({
-                            ...inlineTaskForm,
-                            priority: e.target.value as TaskPriority,
-                          })
-                        }
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
-                      >
-                        <option value="low">Low Priority</option>
-                        <option value="medium">Medium Priority</option>
-                        <option value="high">High Priority</option>
-                        <option value="urgent">Urgent</option>
-                      </select>
-                    </div>
-
-                    {/* Due Date */}
-                    <div>
-                      <input
-                        type="date"
-                        required
-                        value={inlineTaskForm.due_date}
-                        onChange={(e) =>
-                          setInlineTaskForm({ ...inlineTaskForm, due_date: e.target.value })
-                        }
-                        className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-white focus:border-indigo-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
-                    <button
-                      type="button"
-                      onClick={() => setIsInlineAddTaskOpen(false)}
-                      className="px-3 py-1 rounded-md text-xs text-zinc-400 hover:text-white"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-3 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-xs"
-                    >
-                      Save Task
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Tasks List */}
-              {detailProjectTasks.length === 0 ? (
-                <div className="p-4 rounded-xl border border-dashed border-zinc-800 text-center text-xs text-zinc-500">
-                  No tasks created for this project yet. Click &ldquo;+ Add Task&rdquo; to assign one.
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {detailProjectTasks.map((task) => {
-                    const priorityConf = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
-                    const stageConf = STAGE_CONFIG[task.stage];
-                    const dueChip = getDueChip(task.due_date, task.stage);
-
-                    return (
-                      <div
-                        key={task.id}
-                        className="flex items-center justify-between gap-3 p-3 rounded-xl border border-zinc-800/80 bg-zinc-950/70 hover:border-zinc-700 transition"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className={`rounded border px-1.5 py-0.2 text-[9px] font-mono ${priorityConf.badge}`}>
-                              {priorityConf.label}
-                            </span>
-                            <span className="text-xs font-semibold text-white truncate">
-                              {task.title}
-                            </span>
-                            {dueChip && (
-                              <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-mono ${dueChip.style}`}>
-                                {dueChip.text}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-1 flex items-center gap-3 text-[10px] font-mono text-zinc-400">
-                            <span>Assignee: <strong className="text-zinc-200">{task.assigned_to_name || "Unassigned"}</strong></span>
-                            <span>Due: <strong className="text-zinc-200">{formatDate(task.due_date)}</strong></span>
-                          </div>
-                        </div>
-
-                        {/* Stage Badge & Advance */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {!isViewer ? (
-                            <button
-                              onClick={() => handleAdvanceTaskStage(task)}
-                              title="Click to advance stage"
-                              className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono font-medium transition cursor-pointer hover:scale-105 ${stageConf.badge}`}
-                            >
-                              {stageConf.label} &rarr;
-                            </button>
-                          ) : (
-                            <span className={`rounded-lg border px-2.5 py-1 text-[10px] font-mono font-medium ${stageConf.badge}`}>
-                              {stageConf.label}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              <Link
+                href={`/projects/${encodeURIComponent(projectDetail.id)}/stories`}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold transition shadow-sm shrink-0 active:scale-95"
+              >
+                <span>Enter Stories</span>
+                <span>&rarr;</span>
+              </Link>
             </div>
 
             {/* Bottom Actions */}
@@ -1606,14 +1446,15 @@ export default function ProjectsPage() {
                 Close
               </button>
               <Link
-                href={`/projects/${encodeURIComponent(projectDetail.id)}/tasks`}
-                className="px-4 py-2 rounded-lg border border-sky-500/40 bg-sky-950/30 text-xs font-semibold text-sky-200 hover:bg-sky-900/50 hover:text-white transition"
+                href={`/projects/${encodeURIComponent(projectDetail.id)}/stories`}
+                className="px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-850 text-xs font-semibold text-zinc-200 hover:bg-zinc-800 hover:text-white transition flex items-center gap-1.5"
               >
-                Project Tasks &rarr;
+                <span>📖</span>
+                <span>Project Stories &rarr;</span>
               </Link>
               <Link
                 href={`/chat?project=${encodeURIComponent(projectDetail.name)}`}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md transition"
+                className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold transition"
               >
                 Open in Gemini &rarr;
               </Link>
@@ -1651,7 +1492,7 @@ export default function ProjectsPage() {
                   placeholder="e.g. Legal Compliance Analyzer"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1662,7 +1503,7 @@ export default function ProjectsPage() {
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 >
                   <option value="Agentic Workflow">Agentic Workflow (LangGraph)</option>
                   <option value="Semantic Search">Semantic Search (pgvector & Supabase)</option>
@@ -1680,7 +1521,7 @@ export default function ProjectsPage() {
                   placeholder="e.g. LangGraph, PyMuPDF, Playwright"
                   value={formData.tags}
                   onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1693,7 +1534,7 @@ export default function ProjectsPage() {
                   placeholder="e.g. https://example.com/reports"
                   value={formData.source_url}
                   onChange={(e) => setFormData({ ...formData, source_url: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1706,7 +1547,7 @@ export default function ProjectsPage() {
                   placeholder="Summary of purpose, extraction objectives, and workflow goals..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1721,11 +1562,11 @@ export default function ProjectsPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
                   {submitting ? (
                     <>
-                      <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                      <span className="h-3 w-3 rounded-full border-2 border-zinc-950/30 border-t-zinc-950 animate-spin" />
                       <span>Saving...</span>
                     </>
                   ) : (
@@ -1746,7 +1587,7 @@ export default function ProjectsPage() {
           <div className="w-full max-w-2xl rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl animate-scale-up">
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <div className="h-8 w-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-16 5h16" />
                   </svg>
@@ -1771,19 +1612,19 @@ export default function ProjectsPage() {
                 <span className="text-xs font-mono text-zinc-400">schema.sql (Projects, Members, Tasks)</span>
                 <button
                   onClick={handleCopySql}
-                  className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold cursor-pointer transition shadow-xs flex items-center gap-1.5"
                 >
                   {copiedSql ? (
                     <>
-                      <svg className="w-3.5 h-3.5 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg className="w-3.5 h-3.5 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                       </svg>
                       <span>Copied!</span>
                     </>
                   ) : (
                     <>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <svg className="w-3.5 h-3.5 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
                       <span>Copy SQL</span>
                     </>
@@ -1791,7 +1632,7 @@ export default function ProjectsPage() {
                 </button>
               </div>
 
-              <div className="relative rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-emerald-400/90 overflow-x-auto max-h-72 select-all">
+              <div className="relative rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-zinc-300 overflow-x-auto max-h-72 select-all">
                 <pre>{SQL_SCHEMA_TEXT}</pre>
               </div>
             </div>
@@ -1846,7 +1687,7 @@ export default function ProjectsPage() {
                 <select
                   value={editForm.category}
                   onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 >
                   <option value="Agentic Workflow">Agentic Workflow (LangGraph)</option>
                   <option value="Semantic Search">Semantic Search (pgvector & Supabase)</option>
@@ -1861,7 +1702,7 @@ export default function ProjectsPage() {
                   type="text"
                   value={editForm.tags}
                   onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1871,7 +1712,7 @@ export default function ProjectsPage() {
                   type="text"
                   value={editForm.source_url}
                   onChange={(e) => setEditForm({ ...editForm, source_url: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1881,7 +1722,7 @@ export default function ProjectsPage() {
                   rows={3}
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1896,7 +1737,7 @@ export default function ProjectsPage() {
                 <button
                   type="submit"
                   disabled={savingEdit}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
                   {savingEdit ? "Saving..." : "Save Changes"}
                 </button>

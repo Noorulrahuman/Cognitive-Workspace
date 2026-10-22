@@ -590,10 +590,10 @@ export const STORY_STATUS_CONFIG: Record<
   StoryStatus,
   { label: string; badge: string; dot: string }
 > = {
-  open: { label: "Open", badge: "border-zinc-700 bg-zinc-800/80 text-zinc-300", dot: "bg-zinc-400" },
-  in_progress: { label: "In Progress", badge: "border-sky-500/30 bg-sky-500/10 text-sky-300", dot: "bg-sky-400 animate-pulse" },
-  review: { label: "In Review", badge: "border-amber-500/30 bg-amber-500/10 text-amber-300", dot: "bg-amber-400" },
-  completed: { label: "Completed", badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", dot: "bg-emerald-400" },
+  open: { label: "Open", badge: "border-zinc-700/80 bg-zinc-800/60 text-zinc-300", dot: "bg-zinc-400" },
+  in_progress: { label: "In Progress", badge: "border-sky-500/25 bg-sky-500/10 text-sky-300", dot: "bg-sky-400 animate-pulse" },
+  review: { label: "In Review", badge: "border-indigo-400/25 bg-indigo-500/10 text-indigo-200", dot: "bg-indigo-300" },
+  completed: { label: "Completed", badge: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300", dot: "bg-emerald-400" },
 };
 
 export const STAGE_CONFIG: Record<
@@ -602,30 +602,30 @@ export const STAGE_CONFIG: Record<
 > = {
   todo: {
     label: "To Do",
-    badge: "border-zinc-700 bg-zinc-800/80 text-zinc-300",
+    badge: "border-zinc-700/80 bg-zinc-800/60 text-zinc-300",
     border: "border-zinc-800",
     bg: "bg-zinc-900/50",
     dot: "bg-zinc-400",
   },
   in_progress: {
     label: "In Progress",
-    badge: "border-sky-500/30 bg-sky-500/10 text-sky-300",
-    border: "border-sky-500/30",
-    bg: "bg-sky-950/20",
+    badge: "border-sky-500/25 bg-sky-500/10 text-sky-300",
+    border: "border-sky-500/20",
+    bg: "bg-sky-950/15",
     dot: "bg-sky-400 animate-pulse",
   },
   review: {
     label: "In Review",
-    badge: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-    border: "border-amber-500/30",
-    bg: "bg-amber-950/20",
-    dot: "bg-amber-400",
+    badge: "border-indigo-400/25 bg-indigo-500/10 text-indigo-200",
+    border: "border-indigo-500/20",
+    bg: "bg-indigo-950/15",
+    dot: "bg-indigo-300",
   },
   done: {
     label: "Completed",
-    badge: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-    border: "border-emerald-500/30",
-    bg: "bg-emerald-950/20",
+    badge: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+    border: "border-emerald-500/20",
+    bg: "bg-emerald-950/15",
     dot: "bg-emerald-400",
   },
 };
@@ -641,8 +641,8 @@ export const PRIORITY_CONFIG: Record<
   },
   medium: {
     label: "Medium",
-    badge: "border-blue-500/30 bg-blue-500/10 text-blue-300",
-    dot: "bg-blue-400",
+    badge: "border-sky-500/20 bg-sky-500/10 text-sky-200",
+    dot: "bg-sky-400",
   },
   high: {
     label: "High",
@@ -651,7 +651,7 @@ export const PRIORITY_CONFIG: Record<
   },
   urgent: {
     label: "Urgent",
-    badge: "border-rose-500/40 bg-rose-500/15 text-rose-300 font-semibold animate-pulse",
+    badge: "border-rose-500/30 bg-rose-500/15 text-rose-300 font-medium",
     dot: "bg-rose-400",
   },
 };

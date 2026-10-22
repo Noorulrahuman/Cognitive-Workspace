@@ -301,7 +301,7 @@ export default function SettingsPage() {
           className="relative group cursor-pointer shrink-0"
           title="Click to choose a new owl avatar"
         >
-          <div className="p-0.5 rounded-full border-2 border-[var(--accent-color)] shadow-[0_0_14px_var(--accent-glow)] group-hover:scale-105 transition-transform">
+          <div className="p-0.5 rounded-full border-2 border-[var(--accent-color)] group-hover:scale-105 transition-transform">
             <CuteOwlAvatar owlId={avatarId} size="lg" animated />
           </div>
           <div className="absolute inset-0 rounded-full bg-black/65 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity backdrop-blur-[1px]">
@@ -379,11 +379,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={savingName}
-              style={{
-                backgroundColor: "var(--accent-color)",
-                boxShadow: "0 4px 14px var(--accent-glow)",
-              }}
-              className="ml-auto rounded-lg px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 transition cursor-pointer"
+              className="ml-auto rounded-xl px-4 py-2 text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 hover:opacity-90 disabled:opacity-50 transition cursor-pointer shadow-sm active:scale-95"
             >
               {savingName ? "Saving..." : "Save name"}
             </button>
@@ -431,11 +427,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={savingPassword}
-              style={{
-                backgroundColor: "var(--accent-color)",
-                boxShadow: "0 4px 14px var(--accent-glow)",
-              }}
-              className="ml-auto rounded-lg px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50 transition cursor-pointer"
+              className="ml-auto rounded-xl px-4 py-2 text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 hover:opacity-90 disabled:opacity-50 transition cursor-pointer shadow-sm active:scale-95"
             >
               {savingPassword ? "Saving..." : "Change password"}
             </button>
@@ -445,17 +437,17 @@ export default function SettingsPage() {
         {/* ============================================================ */}
         {/* GLOBAL ACCENT PALETTE (ACCESSIBLE FROM WORKSPACE MENU) */}
         {/* ============================================================ */}
-        <div className={`${cardClass} space-y-4 border-amber-500/30 bg-amber-500/5 relative overflow-hidden`}>
+        <div className={`${cardClass} space-y-4 border-zinc-800 bg-zinc-900 relative overflow-hidden`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <span
                 className="h-4 w-4 rounded-full transition-colors shrink-0"
-                style={{ backgroundColor: "var(--accent-color)", boxShadow: "0 0 10px var(--accent-glow)" }}
+                style={{ backgroundColor: "var(--accent-color)" }}
               />
               <div>
                 <h2 className="text-sm font-bold text-white tracking-wide flex items-center gap-2">
                   <span>Workspace Accent Palette</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-800 text-zinc-300">
                     Moved to Top Menu
                   </span>
                 </h2>

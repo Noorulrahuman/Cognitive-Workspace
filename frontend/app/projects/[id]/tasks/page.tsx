@@ -177,12 +177,14 @@ const DEFAULT_PROJECTS: Project[] = [
 ];
 
 const PROJECT_COLORS = [
-  "from-indigo-500 to-violet-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-sky-500 to-cyan-500",
-  "from-rose-500 to-pink-500",
-  "from-fuchsia-500 to-purple-500",
+  "from-emerald-950/60 to-zinc-900 border border-emerald-500/20 text-emerald-300",
+  "from-indigo-950/60 to-zinc-900 border border-indigo-400/20 text-indigo-300",
+  "from-sky-950/60 to-zinc-900 border border-sky-400/20 text-sky-300",
+  "from-rose-950/60 to-zinc-900 border border-rose-400/20 text-rose-300",
+  "from-teal-950/60 to-zinc-900 border border-teal-400/20 text-teal-300",
+  "from-purple-950/60 to-zinc-900 border border-purple-400/20 text-purple-300",
+  "from-blue-950/60 to-zinc-900 border border-blue-400/20 text-blue-300",
+  "from-slate-900/80 to-zinc-900 border border-slate-600/25 text-slate-300",
 ];
 
 function getProjectColor(name: string): string {
@@ -222,10 +224,10 @@ function getDueChip(iso: string, stage: TaskStage): { text: string; style: strin
     return { text: `Overdue by ${-days} day${days === -1 ? "" : "s"}`, style: "border-rose-500/30 bg-rose-500/10 text-rose-300" };
   }
   if (days === 0) {
-    return { text: "Due today", style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+    return { text: "Due today", style: "border-orange-500/25 bg-orange-500/10 text-orange-300" };
   }
   if (days <= 3) {
-    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-amber-500/30 bg-amber-500/10 text-amber-300" };
+    return { text: `Due in ${days} day${days === 1 ? "" : "s"}`, style: "border-sky-500/25 bg-sky-500/10 text-sky-300" };
   }
   return { text: `Due in ${days} days`, style: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" };
 }
@@ -678,7 +680,7 @@ export default function ProjectTasksPage({
         <p className="mt-2 text-xs text-zinc-400">The requested project ID or name does not exist.</p>
         <Link
           href="/projects"
-          className="mt-4 px-4 py-2 rounded-xl bg-indigo-600 text-xs font-semibold text-white"
+          className="mt-4 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95"
         >
           &larr; Back to Projects
         </Link>
@@ -687,25 +689,24 @@ export default function ProjectTasksPage({
   }
 
   return (
-    <div className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-8">
+    <div className="relative flex-1 w-full max-w-7xl mx-auto px-4 sm:px-8 py-8">
+      {/* Ambient Executive Glow */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 h-72 w-full max-w-4xl bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)] blur-2xl -z-10" />
+
       {/* Toast Notification */}
       {toastMessage && (
         <div
           className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-xs font-semibold shadow-2xl backdrop-blur-md animate-scale-up ${
             toastType === "error"
               ? "border-rose-500/30 bg-rose-950/95 text-rose-200"
-              : toastType === "info"
-              ? "border-sky-500/30 bg-sky-950/95 text-sky-200"
-              : "border-indigo-500/30 bg-zinc-900/95 text-indigo-300"
+              : "border-zinc-700 bg-zinc-900/95 text-zinc-200"
           }`}
         >
           <span
             className={`h-2 w-2 rounded-full ${
               toastType === "error"
                 ? "bg-rose-400"
-                : toastType === "info"
-                ? "bg-sky-400"
-                : "bg-indigo-400"
+                : "bg-emerald-400"
             } animate-ping`}
           />
           <span>{toastMessage}</span>
@@ -714,26 +715,26 @@ export default function ProjectTasksPage({
 
       {/* Supabase Notice Banner */}
       {supabaseNotice && (
-        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/80 text-zinc-300">
           <div className="flex items-center gap-2.5">
-            <svg className="w-5 h-5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div className="text-xs">
-              <span className="font-semibold text-amber-100">Database notice:  </span>
+              <span className="font-semibold text-zinc-100">Database notice: </span>
               {supabaseNotice}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setIsSqlModalOpen(true)}
-              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold cursor-pointer transition shadow-xs"
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer transition shadow-xs"
             >
               View SQL Schema
             </button>
             <button
               onClick={() => setSupabaseNotice(null)}
-              className="px-3 py-1.5 rounded-lg border border-amber-500/30 text-amber-200 hover:bg-amber-500/20 text-xs font-semibold cursor-pointer transition"
+              className="px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 text-xs font-semibold cursor-pointer transition"
             >
               Dismiss
             </button>
@@ -759,7 +760,7 @@ export default function ProjectTasksPage({
               <div
                 className={`h-12 w-12 rounded-xl bg-linear-to-br ${getProjectColor(
                   project.name
-                )} flex items-center justify-center text-lg font-bold text-white shadow-md shrink-0`}
+                )} flex items-center justify-center text-lg font-bold shrink-0`}
               >
                 {project.name.charAt(0).toUpperCase()}
               </div>
@@ -768,7 +769,7 @@ export default function ProjectTasksPage({
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
                     {project.name}
                   </h1>
-                  <span className="rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-[10px] font-mono text-indigo-300">
+                  <span className="rounded-md border border-zinc-700 bg-zinc-800/80 px-2.5 py-0.5 text-[10px] font-mono font-medium text-zinc-300">
                     {project.category}
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-emerald-400">
@@ -788,7 +789,7 @@ export default function ProjectTasksPage({
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition cursor-pointer"
                 title="View Supabase Schema & Collaborative Migration SQL"
               >
-                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7M4 7c0-2 1.5-3 3.5-3h9c2 0 3.5 1 3.5 3M4 7h16m-16 5h16" />
                 </svg>
                 <span>Database Schema</span>
@@ -796,9 +797,9 @@ export default function ProjectTasksPage({
 
               <Link
                 href={`/chat?project=${encodeURIComponent(project.name)}`}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/50 text-xs font-semibold text-indigo-200 transition"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 <span>Launch Gemini</span>
@@ -807,10 +808,10 @@ export default function ProjectTasksPage({
               {canAddTask && (
                 <button
                   onClick={() => setIsAddModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-lg shadow-indigo-600/25 transition cursor-pointer active:scale-95"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-xs font-semibold text-zinc-950 shadow-sm transition active:scale-95 cursor-pointer"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  <svg className="w-4 h-4 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                   </svg>
                   <span>Add Task</span>
                 </button>
@@ -822,7 +823,7 @@ export default function ProjectTasksPage({
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-zinc-400">Progress</span>
               {/* Text on the right, e.g. "6 of 10 tasks done (60%)" */}
-              <span className={progressPercent === 100 ? "text-emerald-400 font-semibold" : "text-zinc-300"}>
+              <span className={progressPercent === 100 ? "text-emerald-400 font-semibold" : "text-zinc-300 font-semibold"}>
                 {totalTasks === 0
                   ? "No tasks yet"
                   : `${doneTasks} of ${totalTasks} tasks done (${progressPercent}%)`}
@@ -842,7 +843,7 @@ export default function ProjectTasksPage({
                 className={`h-full rounded-full transition-all duration-500 ${
                   progressPercent === 100
                     ? "bg-emerald-400"
-                    : "bg-linear-to-r from-indigo-500 to-sky-400"
+                    : "bg-zinc-400/80"
                 }`}
                 style={{ width: `${progressPercent}%` }}
               />
@@ -895,7 +896,7 @@ export default function ProjectTasksPage({
             </div>
             <div>
               <span className="text-zinc-500">In Review:</span>{" "}
-              <strong className="text-amber-300 font-bold">
+              <strong className="text-indigo-200 font-bold">
                 {tasks.filter((t) => t.stage === "review").length}
               </strong>
             </div>
@@ -922,7 +923,7 @@ export default function ProjectTasksPage({
             <select
               value={selectedStoryFilter}
               onChange={(e) => setSelectedStoryFilter(e.target.value)}
-              className="bg-transparent text-amber-300 text-xs font-semibold focus:outline-none cursor-pointer max-w-[170px] truncate"
+              className="bg-transparent text-zinc-200 text-xs font-semibold focus:outline-none cursor-pointer max-w-[170px] truncate"
             >
               <option value="All" className="bg-zinc-900 text-white">All Stories ({stories.length})</option>
               {stories.map((s) => (
@@ -959,8 +960,8 @@ export default function ProjectTasksPage({
             >
               <option value="All" className="bg-zinc-900">All Priorities</option>
               <option value="urgent" className="bg-zinc-900 text-rose-300">Urgent</option>
-              <option value="high" className="bg-zinc-900 text-amber-300">High</option>
-              <option value="medium" className="bg-zinc-900 text-blue-300">Medium</option>
+              <option value="high" className="bg-zinc-900 text-zinc-200">High</option>
+              <option value="medium" className="bg-zinc-900 text-zinc-200">Medium</option>
               <option value="low" className="bg-zinc-900 text-zinc-300">Low</option>
             </select>
           </div>
@@ -991,7 +992,7 @@ export default function ProjectTasksPage({
               placeholder="Search tasks, descriptive paths..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 pl-8 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 px-3 py-1.5 pl-8 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
             />
             <svg
               className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-zinc-500"
@@ -1009,7 +1010,7 @@ export default function ProjectTasksPage({
               onClick={() => setViewMode("kanban")}
               className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer flex items-center gap-1 ${
                 viewMode === "kanban"
-                  ? "bg-zinc-800 text-white shadow-xs"
+                  ? "bg-zinc-800 text-white font-semibold shadow-xs"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
@@ -1019,7 +1020,7 @@ export default function ProjectTasksPage({
               onClick={() => setViewMode("list")}
               className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer flex items-center gap-1 ${
                 viewMode === "list"
-                  ? "bg-zinc-800 text-white shadow-xs"
+                  ? "bg-zinc-800 text-white font-semibold shadow-xs"
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
@@ -1031,7 +1032,7 @@ export default function ProjectTasksPage({
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
-          <div className="h-8 w-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-500 animate-spin" />
+          <div className="h-8 w-8 rounded-full border-2 border-zinc-700 border-t-zinc-300 animate-spin" />
           <p className="mt-3 text-xs font-mono">Loading project tasks...</p>
         </div>
       ) : (
@@ -1079,7 +1080,7 @@ export default function ProjectTasksPage({
                             <div
                               key={task.id}
                               onClick={() => openTaskDetail(task)}
-                              className="group relative rounded-xl border border-zinc-800/80 bg-zinc-900/90 hover:border-indigo-500/50 hover:bg-zinc-850 p-4 shadow-md transition-all cursor-pointer space-y-2.5"
+                              className="group relative rounded-xl border border-zinc-800/80 bg-zinc-900/90 hover:border-zinc-700/90 hover:bg-zinc-850 p-4 shadow-md transition-all cursor-pointer space-y-2.5"
                             >
                               {/* Priority & Due */}
                               <div className="flex items-center justify-between gap-2">
@@ -1098,7 +1099,7 @@ export default function ProjectTasksPage({
                                 <div onClick={(e) => e.stopPropagation()}>
                                   <Link
                                     href={`/projects/${encodeURIComponent(project?.id || projectId)}/stories/${encodeURIComponent(task.story_id)}`}
-                                    className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-mono text-amber-300 transition"
+                                    className="inline-flex items-center gap-1 rounded border border-violet-500/20 bg-violet-500/10 hover:bg-violet-500/20 px-1.5 py-0.5 text-[9px] font-mono text-violet-300 transition"
                                     title="View this task under its parent story"
                                   >
                                     <span>📖 {task.story_title || "Story"} &rarr;</span>
@@ -1115,7 +1116,7 @@ export default function ProjectTasksPage({
 
                               {/* Title & Description */}
                               <div>
-                                <h3 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors line-clamp-2">
+                                <h3 className="text-xs font-bold text-white group-hover:text-zinc-100 transition-colors line-clamp-2">
                                   {task.title}
                                 </h3>
                                 <p className="mt-1 text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
@@ -1127,7 +1128,7 @@ export default function ProjectTasksPage({
                               {task.descriptive_paths && task.descriptive_paths.length > 0 && (
                                 <div className="p-2 rounded-lg bg-zinc-950/80 border border-zinc-800/70">
                                   <p className="text-[9px] font-mono uppercase tracking-wider text-zinc-500 mb-1 flex items-center gap-1">
-                                    <svg className="w-3 h-3 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-3 h-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                                     </svg>
                                     <span>Descriptive Paths ({task.descriptive_paths.length}):</span>
@@ -1154,7 +1155,7 @@ export default function ProjectTasksPage({
                               {/* Bottom: Assignee + Stage Advance */}
                               <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <div className="h-6 w-6 rounded-full bg-linear-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs shrink-0">
+                                  <div className="h-6 w-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-semibold text-zinc-300 shadow-xs shrink-0">
                                     {task.assigned_to_name
                                       ? task.assigned_to_name
                                           .split(" ")
@@ -1189,7 +1190,7 @@ export default function ProjectTasksPage({
                                           if (nextIdx < STAGES.length) handleStageChange(task.id, STAGES[nextIdx]);
                                         }}
                                         title="Advance to next stage"
-                                        className="p-1 rounded bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white transition cursor-pointer text-[10px] font-bold px-1.5"
+                                        className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition cursor-pointer text-[10px] px-1.5"
                                       >
                                         &rarr;
                                       </button>
@@ -1305,7 +1306,7 @@ export default function ProjectTasksPage({
           >
             <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <div className="h-8 w-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
@@ -1337,7 +1338,7 @@ export default function ProjectTasksPage({
                   placeholder="e.g. Ingest and normalize SEC 10-K disclosures"
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1349,7 +1350,7 @@ export default function ProjectTasksPage({
                 <select
                   value={taskForm.story_id}
                   onChange={(e) => setTaskForm({ ...taskForm, story_id: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-amber-300 focus:border-amber-400 focus:outline-none cursor-pointer"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
                 >
                   <option value="" className="text-zinc-400">No Story (Direct Project Task)</option>
                   {stories.map((s) => (
@@ -1368,12 +1369,12 @@ export default function ProjectTasksPage({
                 <select
                   value={taskForm.assigned_to_id}
                   onChange={(e) => setTaskForm({ ...taskForm, assigned_to_id: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
                 >
                   <option value="">Unassigned (Open Pool)</option>
                   <optgroup label="👑 Managers & Technical Leadership">
                     {members
-                      .filter((m) => m.role_type === "manager")
+                       .filter((m) => m.role_type === "manager")
                       .map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name} — {m.role_title}
@@ -1403,7 +1404,7 @@ export default function ProjectTasksPage({
                     required
                     value={taskForm.due_date}
                     onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
                   />
                 </div>
 
@@ -1416,7 +1417,7 @@ export default function ProjectTasksPage({
                     onChange={(e) =>
                       setTaskForm({ ...taskForm, priority: e.target.value as TaskPriority })
                     }
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
                   >
                     <option value="low">Low Priority</option>
                     <option value="medium">Medium Priority</option>
@@ -1439,7 +1440,7 @@ export default function ProjectTasksPage({
                       onClick={() => setTaskForm({ ...taskForm, stage: s })}
                       className={`py-2 rounded-lg border text-xs font-semibold transition cursor-pointer ${
                         taskForm.stage === s
-                          ? "border-indigo-500 bg-indigo-500/20 text-white ring-1 ring-indigo-500/30"
+                          ? "border-zinc-500 bg-zinc-800 text-white shadow-xs"
                           : "border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700"
                       }`}
                     >
@@ -1459,7 +1460,7 @@ export default function ProjectTasksPage({
                   placeholder="Describe task scope, requirements, or acceptance criteria..."
                   value={taskForm.description}
                   onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1474,7 +1475,7 @@ export default function ProjectTasksPage({
                   placeholder="Enter descriptive paths (one per line or comma-separated)&#10;e.g.&#10;rag-pipeline/extraction/pdf_tables.py&#10;backend/app/api/parsers/sec_10k.py&#10;docs/specs/10k_table_schema.json"
                   value={taskForm.descriptive_paths_text}
                   onChange={(e) => setTaskForm({ ...taskForm, descriptive_paths_text: e.target.value })}
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-emerald-400/90 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-200 placeholder-zinc-600 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                 />
               </div>
 
@@ -1490,11 +1491,11 @@ export default function ProjectTasksPage({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md disabled:opacity-50 cursor-pointer flex items-center gap-2"
+                  className="px-4 py-2 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
                   {submitting ? (
                     <>
-                      <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                      <span className="h-3 w-3 rounded-full border-2 border-zinc-950/30 border-t-zinc-950 animate-spin" />
                       <span>Saving...</span>
                     </>
                   ) : (
@@ -1554,7 +1555,7 @@ export default function ProjectTasksPage({
 
             {/* EDIT MODE */}
             {isEditingTaskInfo ? (
-              <div className="space-y-4 rounded-xl border border-indigo-500/30 bg-zinc-950/60 p-4">
+              <div className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">
                     Task Title *
@@ -1563,7 +1564,7 @@ export default function ProjectTasksPage({
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                   />
                 </div>
 
@@ -1574,7 +1575,7 @@ export default function ProjectTasksPage({
                   <select
                     value={editPriority}
                     onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none cursor-pointer"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none cursor-pointer"
                   >
                     <option value="low">Low Priority</option>
                     <option value="medium">Medium Priority</option>
@@ -1593,7 +1594,7 @@ export default function ProjectTasksPage({
                     placeholder="Describe task scope, requirements, or acceptance criteria..."
                     value={editDescription}
                     onChange={(e) => setEditDescription(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                   />
                 </div>
 
@@ -1608,7 +1609,7 @@ export default function ProjectTasksPage({
                     placeholder="rag-pipeline/extraction/pdf_tables.py&#10;backend/app/api/parsers/sec_10k.py"
                     value={editPathsText}
                     onChange={(e) => setEditPathsText(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-emerald-400/90 placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-xs text-zinc-200 placeholder-zinc-600 focus:border-zinc-500 focus:ring-1 focus:ring-zinc-500/30 focus:outline-none"
                   />
                 </div>
 
@@ -1632,7 +1633,7 @@ export default function ProjectTasksPage({
                       });
                       setIsEditingTaskInfo(false);
                     }}
-                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-md cursor-pointer"
+                    className="px-4 py-1.5 rounded-xl bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer"
                   >
                     Save Changes
                   </button>
@@ -1792,19 +1793,19 @@ export default function ProjectTasksPage({
                 <span className="text-xs font-mono text-zinc-400">schema.sql (Projects & Tasks Collaborative RLS)</span>
                 <button
                   onClick={handleCopySql}
-                  className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   {copiedSql ? (
                     <>
-                      <svg className="w-3.5 h-3.5 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <svg className="w-3.5 h-3.5 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                       </svg>
                       <span>Copied!</span>
                     </>
                   ) : (
                     <>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <svg className="w-3.5 h-3.5 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
                       <span>Copy SQL</span>
                     </>
@@ -1812,7 +1813,7 @@ export default function ProjectTasksPage({
                 </button>
               </div>
 
-              <div className="relative rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-emerald-400/90 overflow-x-auto max-h-72 select-all">
+              <div className="relative rounded-xl border border-zinc-800 bg-zinc-950 p-4 font-mono text-xs text-zinc-300 overflow-x-auto max-h-72 select-all">
                 <pre>{SQL_SCHEMA_TEXT}</pre>
               </div>
             </div>
