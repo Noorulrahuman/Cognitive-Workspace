@@ -290,15 +290,11 @@ function LoginContent() {
               <button
                 type="submit"
                 disabled={loading}
-                style={{
-                  backgroundColor: "var(--accent-color)",
-                  boxShadow: "0 4px 14px var(--accent-glow)",
-                }}
-                className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold text-black transition-all hover:opacity-95 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full mt-2 py-2.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 transition active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 shadow-sm"
               >
                 {loading ? (
                   <>
-                    <span className="h-3 w-3 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+                    <span className="h-3 w-3 rounded-full border-2 border-zinc-950/30 border-t-zinc-950 animate-spin" />
                     <span>Signing in...</span>
                   </>
                 ) : (
@@ -394,15 +390,11 @@ function LoginContent() {
               <button
                 type="submit"
                 disabled={loading || (registerConfirmPassword.length > 0 && registerPassword !== registerConfirmPassword)}
-                style={{
-                  backgroundColor: "var(--accent-color)",
-                  boxShadow: "0 4px 14px var(--accent-glow)",
-                }}
-                className="w-full mt-2 py-2.5 rounded-xl text-xs font-bold text-black transition-all hover:opacity-95 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full mt-2 py-2.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 transition active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 shadow-sm"
               >
                 {loading ? (
                   <>
-                    <span className="h-3 w-3 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+                    <span className="h-3 w-3 rounded-full border-2 border-zinc-950/30 border-t-zinc-950 animate-spin" />
                     <span>Registering...</span>
                   </>
                 ) : (

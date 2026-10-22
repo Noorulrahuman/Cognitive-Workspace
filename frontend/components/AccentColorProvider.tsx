@@ -11,50 +11,56 @@ export interface AccentPreset {
 
 export const ACCENT_PRESETS: AccentPreset[] = [
   {
-    id: "amber",
-    name: "Imperial Gold",
-    hex: "#f59e0b",
-    description: "Warm cognitive sunlight and executive leadership sheen",
+    id: "sky",
+    name: "Nordic Sky",
+    hex: "#93c5fd",
+    description: "Cool airy soft sky blue for crisp, balanced architectural focus",
   },
   {
-    id: "silver",
-    name: "Translucent Silver",
-    hex: "#e2e8f0",
-    description: "Pure frosted silver luminance and modern glass clarity",
+    id: "sage",
+    name: "Soft Sage",
+    hex: "#98d8aa",
+    description: "Calming botanical mint sage for clean, organic clarity",
   },
   {
-    id: "teal",
-    name: "Electric Teal",
-    hex: "#06b6d4",
-    description: "Futuristic vector retrieval and high-velocity computing",
+    id: "lavender",
+    name: "Pale Lavender",
+    hex: "#c7b9e5",
+    description: "Delicate pastel lilac for thoughtful, creative cognition",
   },
   {
-    id: "emerald",
-    name: "Emerald Green",
-    hex: "#10b981",
-    description: "Crisp, balanced biological & financial intelligence tint",
+    id: "periwinkle",
+    name: "Soft Periwinkle",
+    hex: "#a5b4fc",
+    description: "Balanced, refined blue-violet tone with executive serenity",
   },
   {
-    id: "royal",
-    name: "Royal Blue",
-    hex: "#2563eb",
-    description: "Deep enterprise authority and clean analytical clarity",
+    id: "rose",
+    name: "Rose Quartz",
+    hex: "#fda4af",
+    description: "Subtle muted dusty rose with graceful modern elegance",
   },
   {
-    id: "amethyst",
-    name: "Amethyst Purple",
-    hex: "#8b5cf6",
-    description: "Creative neural orchestrations and high-level reasoning",
+    id: "mineral",
+    name: "Sea Foam",
+    hex: "#99e2d0",
+    description: "Fresh pale mineral cyan with understated clarity",
   },
   {
-    id: "crimson",
-    name: "Crimson Rose",
-    hex: "#e11d48",
-    description: "Vibrant high-priority alerts and energetic execution",
+    id: "linen",
+    name: "Warm Linen",
+    hex: "#d8caa7",
+    description: "Gentle pale ivory parchment with soft, understated warmth",
+  },
+  {
+    id: "slate",
+    name: "Frosted Slate",
+    hex: "#cbd5e1",
+    description: "Neutral architectural titanium slate for minimalist poise",
   },
 ];
 
-export const DEFAULT_ACCENT = "#f59e0b"; // Warm Imperial Gold default translucent accent
+export const DEFAULT_ACCENT = "#93c5fd"; // Gentle Nordic Sky - crisp, soft, and modern
 
 interface AccentContextType {
   accentColor: string;
@@ -121,9 +127,9 @@ export function applyAccentToCss(hex: string) {
   root.style.setProperty("--accent-hover", hoverHex);
   root.style.setProperty("--accent-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
   root.style.setProperty("--accent-subtle", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.16)`);
-  root.style.setProperty("--accent-border", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.38)`);
-  root.style.setProperty("--accent-glow", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.45)`);
-  root.style.setProperty("--accent-ring", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55)`);
+  root.style.setProperty("--accent-border", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`);
+  root.style.setProperty("--accent-glow", "transparent");
+  root.style.setProperty("--accent-ring", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`);
   root.style.setProperty("--accent-text", textTint);
 
   window.dispatchEvent(

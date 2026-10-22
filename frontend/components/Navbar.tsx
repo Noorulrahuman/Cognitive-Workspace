@@ -186,7 +186,7 @@ export default function Navbar() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2.5 group">
             <CognitiveLogo size="sm" variant="icon" />
-            <span className="font-mono text-sm sm:text-base font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] group-hover:drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] transition-all duration-300">
+            <span className="font-mono text-sm sm:text-base font-bold tracking-wider uppercase bg-linear-to-r from-amber-500 via-yellow-200 to-amber-500 bg-size-[200%_auto] bg-clip-text text-transparent animate-gold-shimmer drop-shadow-[0_0_8px_rgba(251,191,36,0.35)] group-hover:drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] transition-all duration-300">
               Cognitive Workspace
             </span>
           </Link>
@@ -262,7 +262,7 @@ export default function Navbar() {
             </div>
 
             {/* Subtle Divider */}
-            <div className="w-[1px] h-4 bg-zinc-800" />
+            <div className="w-px h-4 bg-zinc-800" />
 
             {/* 2. User Profile on normal */}
             <div className="flex items-center gap-2">
@@ -275,7 +275,7 @@ export default function Navbar() {
                 />
               </div>
 
-              <span className="hidden sm:inline-block text-xs font-medium text-zinc-200 max-w-[110px] truncate">
+              <span className="hidden sm:inline-block text-xs font-medium text-zinc-200 max-w-27.5 truncate">
                 {user ? userDisplayName : "Guest Member"}
               </span>
 
@@ -343,7 +343,6 @@ export default function Navbar() {
                       className="h-2.5 w-2.5 rounded-full transition-colors"
                       style={{
                         backgroundColor: "var(--accent-color)",
-                        boxShadow: "0 0 8px var(--accent-glow)",
                       }}
                     />
                     <span className="text-[11px] font-bold text-zinc-200 tracking-wide uppercase">
@@ -373,7 +372,6 @@ export default function Navbar() {
                         }`}
                         style={{
                           backgroundColor: preset.hex,
-                          boxShadow: isSelected ? `0 0 12px ${preset.hex}` : undefined,
                         }}
                       >
                         {isSelected && (
@@ -391,7 +389,7 @@ export default function Navbar() {
                   <label className="text-[11px] font-mono text-zinc-400 flex items-center gap-1.5 cursor-pointer">
                     <input
                       type="color"
-                      value={accentColor.startsWith("#") ? accentColor : "#f59e0b"}
+                      value={accentColor.startsWith("#") ? accentColor : "#93c5fd"}
                       onChange={(e) => setAccentColor(e.target.value)}
                       className="w-5 h-5 rounded-md border border-zinc-700 bg-transparent cursor-pointer p-0"
                       title="Direct color swatch picker"
@@ -411,18 +409,18 @@ export default function Navbar() {
                         }
                       }}
                       placeholder={accentColor}
-                      className="w-20 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[11px] font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-[var(--accent-color)]"
+                      className="w-20 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[11px] font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-accent"
                     />
                     <button
                       type="button"
                       onClick={() => {
-                        setAccentColor("#f59e0b");
+                        setAccentColor("#93c5fd");
                         setCustomHexInput("");
                       }}
-                      title="Reset to Imperial Gold default"
-                      className="px-2 py-0.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 text-[10px] font-mono transition cursor-pointer"
+                      title="Reset to Nordic Sky default"
+                      className="px-2 py-0.5 rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 text-[10px] font-mono transition cursor-pointer"
                     >
-                      Gold
+                      Default
                     </button>
                   </div>
                 </div>
@@ -461,11 +459,7 @@ export default function Navbar() {
                     <Link
                       href="/login?tab=register"
                       onClick={() => setIsMenuOpen(false)}
-                      style={{
-                        backgroundColor: "var(--accent-color)",
-                        boxShadow: "0 4px 14px var(--accent-glow)",
-                      }}
-                      className="flex items-center justify-center py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90 text-center"
+                      className="flex items-center justify-center py-2 rounded-lg bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-semibold shadow-sm transition active:scale-95 text-center"
                     >
                       Register
                     </Link>

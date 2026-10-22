@@ -53,7 +53,7 @@ const ROLE_CONFIG: Record<
 > = {
   Admin: {
     label: "Admin",
-    badge: "border-amber-500/30 bg-amber-500/10 text-amber-300 font-semibold",
+    badge: "border-indigo-500/30 bg-indigo-500/10 text-indigo-300 font-semibold",
     icon: "👑",
     desc: "Full administrative controls, project/story orchestration, and role assignment",
   },
@@ -538,14 +538,10 @@ export default function MembersPage() {
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
-            style={{
-              backgroundColor: "var(--accent-color)",
-              boxShadow: "0 4px 14px var(--accent-glow)",
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 active:scale-95 cursor-pointer"
+            className="flex items-center gap-2 rounded-xl bg-zinc-100 hover:bg-white px-4 py-2 text-xs font-semibold text-zinc-950 shadow-sm transition cursor-pointer active:scale-95"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <svg className="w-4 h-4 text-zinc-950 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
             </svg>
             <span>Add Member</span>
           </button>
@@ -554,13 +550,13 @@ export default function MembersPage() {
 
       {/* Summary Metrics Bar */}
       <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Total Members</p>
           <p className="mt-1 text-2xl font-bold text-white">{members.length}</p>
         </div>
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-amber-400">Admins</p>
-          <p className="mt-1 text-2xl font-bold text-amber-300">
+        <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-indigo-400">Admins</p>
+          <p className="mt-1 text-2xl font-bold text-indigo-300">
             {members.filter((m) => m.system_role === "Admin").length}
           </p>
         </div>
@@ -649,11 +645,11 @@ export default function MembersPage() {
             No members matching your search or role filter.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/40 backdrop-blur-md shadow-xl">
+          <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-md">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-zinc-800/80 bg-zinc-950/60 text-zinc-400 font-mono uppercase text-[10px] tracking-wider">
+                  <tr className="border-b border-zinc-800 bg-zinc-950 text-zinc-400 font-mono uppercase text-[10px] tracking-wider">
                     <th className="py-3.5 px-4 sm:px-6">Member Name & Identity</th>
                     <th className="py-3.5 px-4">System Role</th>
                     <th className="py-3.5 px-4 hidden md:table-cell">Technical Domain</th>
@@ -810,7 +806,7 @@ export default function MembersPage() {
               className="w-screen max-w-md sm:max-w-xl bg-zinc-900 border-l border-zinc-800 shadow-2xl flex flex-col justify-between animate-slide-in-right overflow-hidden"
             >
               {/* Drawer Top Bar */}
-              <div className="p-6 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
+              <div className="p-6 border-b border-zinc-800 bg-zinc-950">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3.5">
                     {/* Owl Avatar */}
@@ -1100,11 +1096,7 @@ export default function MembersPage() {
                           <button
                             type="submit"
                             disabled={savingDetails}
-                            style={{
-                              backgroundColor: "var(--accent-color)",
-                              boxShadow: "0 2px 8px var(--accent-glow)",
-                            }}
-                            className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white hover:opacity-90 active:scale-95 disabled:opacity-50"
+                            className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 active:scale-95 disabled:opacity-50 transition cursor-pointer shadow-sm"
                           >
                             {savingDetails ? "Saving..." : "Save Details"}
                           </button>
@@ -1335,7 +1327,7 @@ export default function MembersPage() {
               </div>
 
               {/* Drawer Bottom Bar */}
-              <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 backdrop-blur-md flex items-center justify-between">
+              <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex items-center justify-between">
                 <span className="text-[11px] font-mono text-zinc-500">
                   Esc to close drawer
                 </span>
@@ -1559,11 +1551,7 @@ export default function MembersPage() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  style={{
-                    backgroundColor: "var(--accent-color)",
-                    boxShadow: "0 4px 14px var(--accent-glow)",
-                  }}
-                  className="px-5 py-2 rounded-xl text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm"
                 >
                   {submitting ? "Adding..." : "Add Member"}
                 </button>

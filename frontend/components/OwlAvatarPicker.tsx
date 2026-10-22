@@ -64,9 +64,9 @@ export function OwlAvatarPicker({
               type="button"
               onClick={() => handleChoose(owl.id)}
               onDoubleClick={() => handleDoubleClick(owl.id)}
-              className={`group relative flex flex-col items-center p-2 rounded-2xl border transition-all text-center cursor-pointer ${
+                className={`group relative flex flex-col items-center p-2 rounded-2xl border transition-all text-center cursor-pointer ${
                 isSelected
-                  ? "border-[var(--accent-color)] bg-[var(--accent-subtle)] shadow-[0_0_16px_var(--accent-glow)] scale-105"
+                  ? "border-[var(--accent-color)] bg-[var(--accent-subtle)] ring-1 ring-[var(--accent-color)]/40 shadow-sm scale-105"
                   : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-700 hover:bg-zinc-850 hover:scale-102"
               }`}
             >
@@ -124,11 +124,7 @@ export function OwlAvatarPicker({
                 onSelect(highlightedId);
                 if (onClose) onClose();
               }}
-              style={{
-                backgroundColor: "var(--accent-color)",
-                boxShadow: "0 2px 10px var(--accent-glow)",
-              }}
-              className="px-4 py-1.5 rounded-xl text-xs font-bold text-black hover:opacity-95 transition"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-white text-zinc-950 transition active:scale-95 shadow-sm cursor-pointer"
             >
               Save Avatar
             </button>

@@ -176,11 +176,7 @@ export default function Home() {
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3.5">
           <Link
             href="/projects"
-            style={{
-              backgroundColor: "var(--accent-color)",
-              boxShadow: "0 6px 20px var(--accent-glow)",
-            }}
-            className="flex h-12 items-center justify-center rounded-xl px-7 text-sm font-semibold text-white transition hover:opacity-95 hover:scale-[1.03] active:scale-95 cursor-pointer"
+            className="flex h-12 items-center justify-center rounded-xl bg-zinc-100 hover:bg-white px-7 text-sm font-semibold text-zinc-950 shadow-sm transition hover:scale-[1.02] active:scale-95 cursor-pointer"
           >
             <span>Explore Projects & Stories &rarr;</span>
           </Link>
