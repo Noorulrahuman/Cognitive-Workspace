@@ -15,7 +15,7 @@ const UserAvatarContext = createContext<UserAvatarContextType>({
 
 export function UserAvatarProvider({ children }: { children: React.ReactNode }) {
   const [avatarId, setAvatarIdState] = useState<string>("avatar-1");
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
 
   useEffect(() => {
     // 1. Check local storage first for instant load
@@ -25,7 +25,8 @@ export function UserAvatarProvider({ children }: { children: React.ReactNode }) 
     }
 
     // 2. Check if logged in user has an avatar in user_metadata
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then((res: any) => {
+      const user = res?.data?.user;
       if (user?.user_metadata?.owl_avatar) {
         setAvatarIdState(user.user_metadata.owl_avatar);
         localStorage.setItem("user_owl_avatar", user.user_metadata.owl_avatar);

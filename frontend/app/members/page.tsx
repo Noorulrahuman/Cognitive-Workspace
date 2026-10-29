@@ -21,6 +21,8 @@ import {
   isDefaultAdmin,
   canManageRoles,
   fetchWorkspaceTasks,
+  getMembersLocal,
+  getTasksLocal,
   Task,
   STAGE_CONFIG,
   PRIORITY_CONFIG,
@@ -84,7 +86,12 @@ export default function MembersPage() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMembers(getMembersLocal());
+    setTasks(getTasksLocal());
+  }, []);
 
   // Filters & Search
   const [roleFilter, setRoleFilter] = useState<"all" | SystemRole | "manager" | "developer">("all");
@@ -179,7 +186,8 @@ export default function MembersPage() {
   // 1. Initial Load of Members & Tasks
   useEffect(() => {
     async function loadData() {
-      setLoading(true);
+      // If we don't have members yet, show loader; otherwise background revalidate without flash
+      if (members.length === 0) setLoading(true);
       const [membersData, tasksData] = await Promise.all([
         fetchWorkspaceMembers(supabase),
         fetchWorkspaceTasks(supabase),
@@ -209,9 +217,9 @@ export default function MembersPage() {
     const channel = supabase
       .channel("members-realtime-auth-sync")
       .on(
-        "postgres_changes",
+        "postgres_changes" as any,
         { event: "*", schema: "public", table: "members" },
-        (payload) => {
+        (payload: any) => {
           if (payload.eventType === "INSERT") {
             const newMem = payload.new as Member;
             setMembers((prev) => {
@@ -552,17 +560,17 @@ export default function MembersPage() {
       <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Total Members</p>
-          <p className="mt-1 text-2xl font-bold text-white">{members.length}</p>
+          <p suppressHydrationWarning className="mt-1 text-2xl font-bold text-white">{members.length}</p>
         </div>
         <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
           <p className="text-[10px] font-mono uppercase tracking-wider text-indigo-400">Admins</p>
-          <p className="mt-1 text-2xl font-bold text-indigo-300">
+          <p suppressHydrationWarning className="mt-1 text-2xl font-bold text-indigo-300">
             {members.filter((m) => m.system_role === "Admin").length}
           </p>
         </div>
         <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4">
           <p className="text-[10px] font-mono uppercase tracking-wider text-purple-400">Managers</p>
-          <p className="mt-1 text-2xl font-bold text-purple-300">
+          <p suppressHydrationWarning className="mt-1 text-2xl font-bold text-purple-300">
             {members.filter((m) => m.system_role === "Manager").length}
           </p>
         </div>

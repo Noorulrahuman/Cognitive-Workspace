@@ -19,13 +19,16 @@ import {
   fetchWorkspaceTasks,
   fetchWorkspaceMembers,
   fetchWorkspaceStories,
+  getStoriesLocal,
+  getTasksLocal,
+  getMembersLocal,
   computeProjectProgress,
   createWorkspaceTask,
   updateWorkspaceTask,
 } from "@/utils/workspaceData";
 import OwlLoader from "@/components/OwlLoader";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+import { SQL_SCHEMA_TEXT } from "@/utils/sqlSchema";
+import { safeFetch, safeJson, API_URL } from "@/utils/apiClient";
 
 // NEW: true when a Server Action failed because of the database (the page may then continue locally)
 const isDatabaseProblem = (error: string) =>
@@ -159,129 +162,8 @@ const DEFAULT_PROJECTS: Project[] = [
   }
 ];
 
-const SQL_SCHEMA_TEXT = `-- Copy & paste into Supabase Dashboard -> SQL Editor:
--- ==============================================================================
--- 1. Table: public.projects
--- ==============================================================================
-CREATE TABLE IF NOT EXISTS public.projects (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    name TEXT NOT NULL,
-    title TEXT,
-    description TEXT DEFAULT '',
-    category TEXT DEFAULT 'Agentic Workflow',
-    tags TEXT[] DEFAULT ARRAY[]::TEXT[],
-    source_url TEXT,
-    documents_count INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'Active',
-    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+// SQL schema is imported from @/utils/sqlSchema to minimize client bundle bloat
 
-ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "projects_select_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_insert_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_update_policy" ON public.projects;
-DROP POLICY IF EXISTS "projects_delete_policy" ON public.projects;
-DROP POLICY IF EXISTS "Allow read projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow insert projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow update projects" ON public.projects;
-DROP POLICY IF EXISTS "Allow delete projects" ON public.projects;
-
-CREATE POLICY "Allow read projects" ON public.projects FOR SELECT USING (true);
-CREATE POLICY "Allow insert projects" ON public.projects FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update projects" ON public.projects FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete projects" ON public.projects FOR DELETE USING (true);
-
--- ==============================================================================
--- 2. Table: public.members
--- ==============================================================================
-CREATE TABLE IF NOT EXISTS public.members (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    role_type TEXT NOT NULL CHECK (role_type IN ('manager', 'developer')),
-    role_title TEXT NOT NULL,
-    department TEXT DEFAULT 'Engineering',
-    avatar_color TEXT DEFAULT 'from-indigo-600 to-sky-700',
-    status TEXT DEFAULT 'online',
-    skills TEXT[] DEFAULT ARRAY[]::TEXT[],
-    assigned_projects TEXT[] DEFAULT ARRAY[]::TEXT[],
-    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow read members" ON public.members;
-DROP POLICY IF EXISTS "Allow insert members" ON public.members;
-DROP POLICY IF EXISTS "Allow update members" ON public.members;
-DROP POLICY IF EXISTS "Allow delete members" ON public.members;
-
-CREATE POLICY "Allow read members" ON public.members FOR SELECT USING (true);
-CREATE POLICY "Allow insert members" ON public.members FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update members" ON public.members FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete members" ON public.members FOR DELETE USING (true);
-
--- ==============================================================================
--- 3. Table: public.tasks
--- ==============================================================================
-CREATE TABLE IF NOT EXISTS public.tasks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-    title TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    status TEXT NOT NULL DEFAULT 'pending',
-    priority TEXT NOT NULL DEFAULT 'medium',
-    due_date TIMESTAMPTZ,
-    stage TEXT DEFAULT 'todo',
-    project_name TEXT,
-    descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[],
-    assigned_to_id TEXT,
-    assigned_to_name TEXT,
-    assigned_to_role TEXT,
-    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Safely add missing columns to tasks if table existed previously:
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'todo';
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS project_name TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS descriptive_paths TEXT[] DEFAULT ARRAY[]::TEXT[];
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_id TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_name TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS assigned_to_role TEXT;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS due_date TIMESTAMPTZ;
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'medium';
-ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
-
--- Make user_id nullable so collaborative workspace members can contribute:
-ALTER TABLE public.tasks ALTER COLUMN user_id DROP NOT NULL;
-
--- Drop old restrictive single-user policies:
-ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "tasks_select_policy" ON public.tasks;
-DROP POLICY IF EXISTS "tasks_insert_policy" ON public.tasks;
-DROP POLICY IF EXISTS "tasks_update_policy" ON public.tasks;
-DROP POLICY IF EXISTS "tasks_delete_policy" ON public.tasks;
-DROP POLICY IF EXISTS "Users can view own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Users can insert own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow read tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow insert tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow update tasks" ON public.tasks;
-DROP POLICY IF EXISTS "Allow delete tasks" ON public.tasks;
-
--- Collaborative tasks policies (all team members can read, add, update, delete tasks under projects):
-CREATE POLICY "Allow read tasks" ON public.tasks FOR SELECT USING (true);
-CREATE POLICY "Allow insert tasks" ON public.tasks FOR INSERT WITH CHECK (true);
-CREATE POLICY "Allow update tasks" ON public.tasks FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow delete tasks" ON public.tasks FOR DELETE USING (true);
-
--- Enable Supabase Realtime so live changes immediately broadcast to other team members:
-ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
-`;
 
 export default function ProjectsPage() {
   const supabase = createClient();
@@ -292,6 +174,23 @@ export default function ProjectsPage() {
   const [stories, setStories] = useState<Story[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // Synchronize client cache on initial mount to avoid SSR hydration mismatches
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cognitive_projects");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setProjects(parsed);
+        }
+      }
+    } catch {}
+    setStories(getStoriesLocal());
+    setTasks(getTasksLocal());
+    setMembers(getMembersLocal());
+  }, []);
 
   // Derive current user member & role permissions
   const currentUserMember = useMemo(() => {
@@ -312,7 +211,7 @@ export default function ProjectsPage() {
   const canEditProject = currentUserRole === "Admin" || currentUserRole === "Manager";
   const canDeleteProject = currentUserRole === "Admin" || currentUserRole === "Manager";
   const isViewer = currentUserRole === "Viewer";
-  const [loading, setLoading] = useState<boolean>(true);
+  // Search & filters
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   // NEW: grid view (3 cards per row) or list view (1 card per row)
@@ -451,19 +350,17 @@ export default function ProjectsPage() {
       setSupabaseConnected(false);
     }
 
-    // 2. Fallback: Query backend API
+    // 2. Fallback: Query backend API with fast failover
     try {
-      const res = await fetch(`${API_URL}/api/v1/projects`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setProjects(data);
-          setLoading(false);
-          return;
-        }
+      const res = await safeFetch(`${API_URL}/api/v1/projects`, {}, 400);
+      const data = await safeJson(res);
+      if (Array.isArray(data) && data.length > 0) {
+        setProjects(data);
+        setLoading(false);
+        return;
       }
     } catch {
-      // Backend offline
+      // Backend offline fast failover
     }
 
     // 3. Fallback: LocalStorage
@@ -635,12 +532,12 @@ export default function ProjectsPage() {
 
     if (!createdProject) {
       try {
-        const res = await fetch(`${API_URL}/api/v1/projects`, {
+        const res = await safeFetch(`${API_URL}/api/v1/projects`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(projectPayload)
-        });
-        if (res.ok) createdProject = await res.json();
+        }, 600);
+        createdProject = await safeJson(res);
       } catch {
         // offline
       }
@@ -698,7 +595,7 @@ export default function ProjectsPage() {
     }
 
     try {
-      await fetch(`${API_URL}/api/v1/projects/${targetId}`, { method: "DELETE" });
+      await safeFetch(`${API_URL}/api/v1/projects/${targetId}`, { method: "DELETE" }, 600);
     } catch {
       // Ignore
     }
@@ -949,7 +846,10 @@ export default function ProjectsPage() {
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
               Projects
             </h1>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-0.5 text-xs font-medium text-zinc-300">
+            <span
+              suppressHydrationWarning
+              className="rounded-full border border-zinc-800 bg-zinc-900 px-2.5 py-0.5 text-xs font-medium text-zinc-300"
+            >
               {projects.length}
             </span>
             <span
@@ -1033,26 +933,26 @@ export default function ProjectsPage() {
       <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Projects</p>
-          <p className="mt-1 text-2xl font-bold text-white">{projects.length}</p>
+          <p suppressHydrationWarning className="mt-1 text-2xl font-bold text-white">{projects.length}</p>
           <p className="mt-0.5 text-[11px] text-zinc-500">in your workspace</p>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Total tasks</p>
-          <p className="mt-1 text-2xl font-bold text-white">{totalTasks}</p>
+          <p suppressHydrationWarning className="mt-1 text-2xl font-bold text-white">{totalTasks}</p>
           <p className="mt-0.5 text-[11px] text-sky-300/80">{activeTasks} in progress</p>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">
           <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Completed</p>
-          <p className="mt-1 text-2xl font-bold text-emerald-400">{completedPercent}%</p>
+          <p suppressHydrationWarning className="mt-1 text-2xl font-bold text-emerald-400">{completedPercent}%</p>
           <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
               style={{ width: `${completedPercent}%` }}
             />
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500">{doneTasks} of {totalTasks} tasks done</p>
+          <p suppressHydrationWarning className="mt-1 text-[11px] text-zinc-500">{doneTasks} of {totalTasks} tasks done</p>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 hover:border-zinc-700 transition-colors">

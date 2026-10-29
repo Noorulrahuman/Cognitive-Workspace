@@ -144,7 +144,7 @@ export default function RequirementsPage() {
     async function fetchReqs() {
       try {
         const res = await fetch(`${API_URL}/api/v1/requirements`, {
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(800),
         });
         if (!isMounted) return;
         if (res.ok) {

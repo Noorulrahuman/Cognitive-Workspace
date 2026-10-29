@@ -20,6 +20,14 @@ def get_or_create_session(session_id: str | None) -> str:
         return new_id
 
 
+def get_history(session_id: str) -> list[dict]:
+    """Return the conversation history for a given session."""
+    with _lock:
+        if session_id not in _sessions:
+            _sessions[session_id] = []
+        return _sessions[session_id]
+
+
 def generate_reply(session_id: str, user_message: str) -> str:
     """Send the conversation to Groq and return the reply. History is saved only on success."""
     with _lock:

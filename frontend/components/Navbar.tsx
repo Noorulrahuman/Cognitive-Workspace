@@ -20,10 +20,6 @@ import BackendStatus from "@/components/BackendStatus";
  *              API & Database health, and quick workspace shortcuts.
  * ========================================================================== */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-
-type BackendStatus = "online" | "offline" | "checking";
-
 const NAV_ITEMS = [
   { name: "Overview", href: "/" },
   { name: "Projects", href: "/projects" },
@@ -31,19 +27,6 @@ const NAV_ITEMS = [
   { name: "Inbox", href: "/inbox" },
   { name: "Gemini", href: "/chat" },
 ];
-
-const STATUS_STYLES: Record<
-  BackendStatus,
-  { dot: string; text: string; label: string }
-> = {
-  online: {
-    dot: "bg-emerald-400 animate-pulse",
-    text: "text-emerald-400 font-semibold",
-    label: "Online (Healthy)",
-  },
-  checking: { dot: "bg-yellow-400", text: "text-yellow-400", label: "Checking..." },
-  offline: { dot: "bg-red-400", text: "text-red-400", label: "Offline (Local Cache)" },
-};
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -55,46 +38,6 @@ function getInitials(name: string) {
   const letters =
     parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : name.slice(0, 2);
   return letters.toUpperCase() || "CW";
-}
-
-function useBackendStatus(intervalMs = 15000): BackendStatus {
-  const [status, setStatus] = useState<BackendStatus>("checking");
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function check() {
-      if (document.hidden) return;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      try {
-        const res = await fetch(`${API_URL}/api/v1/health`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        if (isMounted) setStatus(res.ok ? "online" : "offline");
-      } catch {
-        if (isMounted) setStatus("offline");
-      } finally {
-        clearTimeout(timeout);
-      }
-    }
-
-    check();
-    const id = setInterval(check, intervalMs);
-    const onVisible = () => {
-      if (!document.hidden) check();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      isMounted = false;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, []);
-
-  return status;
 }
 function useInboxUnread(): number {
   const [count, setCount] = useState<number>(0);
@@ -132,9 +75,7 @@ export default function Navbar() {
   const { accentColor, setAccentColor, presets, activePreset } = useAccent();
   const { avatarId } = useUserAvatar();
   const [customHexInput, setCustomHexInput] = useState<string>("");
-  const backendStatus = useBackendStatus();
   const inboxUnread = useInboxUnread();
-  const statusStyle = STATUS_STYLES[backendStatus];
 
   // Bundled menu state
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);

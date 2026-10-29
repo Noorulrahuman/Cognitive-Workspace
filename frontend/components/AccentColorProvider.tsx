@@ -17,16 +17,22 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     description: "Cool airy soft sky blue for crisp, balanced architectural focus",
   },
   {
-    id: "sage",
-    name: "Soft Sage",
-    hex: "#98d8aa",
-    description: "Calming botanical mint sage for clean, organic clarity",
+    id: "violet",
+    name: "Cosmic Violet",
+    hex: "#c084fc",
+    description: "Sleek luminous amethyst for deep creative focus and AI agentic poise",
   },
   {
-    id: "lavender",
-    name: "Pale Lavender",
-    hex: "#c7b9e5",
-    description: "Delicate pastel lilac for thoughtful, creative cognition",
+    id: "emerald",
+    name: "Aurora Emerald",
+    hex: "#34d399",
+    description: "Radiant high-contrast emerald for live health, momentum and clarity",
+  },
+  {
+    id: "amber",
+    name: "Golden Topaz",
+    hex: "#fbbf24",
+    description: "Lustrous warm cyber gold matching the executive Owl emblem",
   },
   {
     id: "periwinkle",
@@ -41,16 +47,10 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     description: "Subtle muted dusty rose with graceful modern elegance",
   },
   {
-    id: "mineral",
-    name: "Sea Foam",
-    hex: "#99e2d0",
-    description: "Fresh pale mineral cyan with understated clarity",
-  },
-  {
-    id: "linen",
-    name: "Warm Linen",
-    hex: "#d8caa7",
-    description: "Gentle pale ivory parchment with soft, understated warmth",
+    id: "sage",
+    name: "Soft Sage",
+    hex: "#98d8aa",
+    description: "Calming botanical mint sage for clean, organic clarity",
   },
   {
     id: "slate",
@@ -59,6 +59,7 @@ export const ACCENT_PRESETS: AccentPreset[] = [
     description: "Neutral architectural titanium slate for minimalist poise",
   },
 ];
+
 
 export const DEFAULT_ACCENT = "#93c5fd"; // Gentle Nordic Sky - crisp, soft, and modern
 
@@ -128,7 +129,7 @@ export function applyAccentToCss(hex: string) {
   root.style.setProperty("--accent-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
   root.style.setProperty("--accent-subtle", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.16)`);
   root.style.setProperty("--accent-border", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`);
-  root.style.setProperty("--accent-glow", "transparent");
+  root.style.setProperty("--accent-glow", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.28)`);
   root.style.setProperty("--accent-ring", `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`);
   root.style.setProperty("--accent-text", textTint);
 

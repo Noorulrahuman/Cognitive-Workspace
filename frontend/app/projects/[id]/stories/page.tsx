@@ -29,6 +29,9 @@ import {
   updateWorkspaceTask,
   deleteWorkspaceTask,
   fetchWorkspaceMembers,
+  getStoriesLocal,
+  getTasksLocal,
+  getMembersLocal,
   computeStoryProgress,
   computeProjectProgress,
 } from "@/utils/workspaceData";
@@ -57,12 +60,18 @@ export default function ProjectStoriesPage({
   const supabase = createClient();
   const { user } = useAuth();
 
-  // State
+  // State with safe client-side hydration to avoid SSR mismatches
   const [project, setProject] = useState<ProjectSeed | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    setStories(getStoriesLocal());
+    setTasks(getTasksLocal());
+    setMembers(getMembersLocal());
+  }, []);
 
   // Derive current user member & role permissions
   const currentUserMember = useMemo(() => {
@@ -110,7 +119,7 @@ export default function ProjectStoriesPage({
 
   // Load Initial Data
   const loadWorkspaceData = useCallback(async () => {
-    setLoading(true);
+    if (stories.length === 0) setLoading(true);
 
     // 1. Resolve project
     let currentProj: ProjectSeed | null = null;
