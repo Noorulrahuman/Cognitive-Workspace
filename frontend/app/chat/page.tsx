@@ -148,64 +148,138 @@ function ChatContent() {
     ? projectsList
     : [selectedProject, ...projectsList];
 
- const handleSendMessage = async (textToSend?: string) => {
-  const text = (textToSend || inputPrompt).trim();
-  if (!text || isProcessing) return;
+  const handleSendMessage = async (textToSend?: string) => {
+    const text = (textToSend || inputPrompt).trim();
+    if (!text || isProcessing) return;
 
-  const userMsg: Message = {
-    id: getNextMessageId("user"),
-    sender: "user",
-    content: text,
-    timestamp: getFormattedTime(),
-  };
+    const userMsg: Message = {
+      id: getNextMessageId("user"),
+      sender: "user",
+      content: text,
+      timestamp: getFormattedTime(),
+    };
 
-  setMessages((prev) => [...prev, userMsg]);
-  setInputPrompt("");
-  setIsProcessing(true);
+    setMessages((prev) => [...prev, userMsg]);
+    setInputPrompt("");
+    setIsProcessing(true);
 
-  const controller = new AbortController();
-  abortRef.current = controller;
+    const controller = new AbortController();
+    abortRef.current = controller;
 
-  try {
-    const res = await fetch(`${API_URL}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, session_id: sessionId }),
-      signal: controller.signal,
-    });
+    const assistantMsgId = getNextMessageId("gemini");
+    const assistantPlaceholder: Message = {
+      id: assistantMsgId,
+      sender: "gemini",
+      content: "",
+      timestamp: getFormattedTime(),
+    };
+    setMessages((prev) => [...prev, assistantPlaceholder]);
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => null);
-      throw new Error(typeof err?.detail === "string" ? err.detail : `Server error ${res.status}`);
+    try {
+      let res: Response;
+      let isStream = false;
+
+      try {
+        res = await fetch(`${API_URL}/chat/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, session_id: sessionId }),
+          signal: controller.signal,
+        });
+        if (res.ok && (res.headers.get("content-type")?.includes("text/event-stream") || res.body)) {
+          isStream = true;
+        } else if (res.status === 404 || res.status === 405) {
+          // Fallback to standard /chat
+          res = await fetch(`${API_URL}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: text, session_id: sessionId }),
+            signal: controller.signal,
+          });
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        // Fallback to standard /chat
+        res = await fetch(`${API_URL}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, session_id: sessionId }),
+          signal: controller.signal,
+        });
+      }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(typeof err?.detail === "string" ? err.detail : `Server error ${res.status}`);
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (isStream && res.body && (contentType.includes("text/event-stream") || contentType.includes("text/plain"))) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let accumulated = "";
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          let streamDone = false;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("data: ")) {
+              const payload = trimmed.slice(6).trim();
+              if (payload === "[DONE]") {
+                streamDone = true;
+                break;
+              }
+              try {
+                const parsed = JSON.parse(payload);
+                if (parsed.session_id) setSessionId(parsed.session_id);
+                if (parsed.token !== undefined) accumulated += parsed.token;
+                else if (parsed.chunk !== undefined) accumulated += parsed.chunk;
+                else if (parsed.reply !== undefined) accumulated += parsed.reply;
+                else if (parsed.error) accumulated += `\n[Error: ${parsed.error}]`;
+                // Metadata events (e.g. session_id) are handled above and not added to message text
+              } catch {
+                accumulated += payload;
+              }
+            } else if (trimmed && !trimmed.startsWith("event:") && !trimmed.startsWith(":")) {
+              accumulated += trimmed;
+            }
+          }
+
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMsgId ? { ...m, content: accumulated } : m))
+          );
+
+          if (streamDone) break;
+        }
+      } else {
+        const data = await res.json();
+        if (data.session_id) setSessionId(data.session_id);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantMsgId ? { ...m, content: data.reply || "" } : m))
+        );
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      const msg = e instanceof Error ? e.message : "Something went wrong.";
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId
+            ? { ...m, content: `⚠️ ${msg}` }
+            : m
+        )
+      );
+    } finally {
+      if (abortRef.current === controller) setIsProcessing(false);
     }
-
-    const data = await res.json();
-    setSessionId(data.session_id);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: getNextMessageId("gemini"),
-        sender: "gemini",
-        content: data.reply,
-        timestamp: getFormattedTime(),
-      },
-    ]);
-  } catch (e) {
-    if (e instanceof DOMException && e.name === "AbortError") return;
-    const msg = e instanceof Error ? e.message : "Something went wrong.";
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: getNextMessageId("gemini"),
-        sender: "gemini",
-        content: `⚠️ ${msg}`,
-        timestamp: getFormattedTime(),
-      },
-    ]);
-  } finally {
-    if (abortRef.current === controller) setIsProcessing(false);
-  }
-};
+  };
 
   const handleNewChat = () => {
   abortRef.current?.abort();

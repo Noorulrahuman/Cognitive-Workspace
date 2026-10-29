@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #09090b;
+  --background: #08090d;
   --foreground: #ededed;
   --accent-color: #93c5fd;
   --accent-hover: #60a5fa;
-  --accent-subtle: rgba(147, 197, 253, 0.12);
-  --accent-border: rgba(147, 197, 253, 0.25);
-  --accent-glow: transparent;
-  --accent-ring: rgba(147, 197, 253, 0.35);
+  --accent-subtle: rgba(147, 197, 253, 0.14);
+  --accent-border: rgba(147, 197, 253, 0.28);
+  --accent-glow: rgba(147, 197, 253, 0.28);
+  --accent-ring: rgba(147, 197, 253, 0.4);
   --accent-text: #e0f2fe;
   color-scheme: dark;
 }
@@ -29,7 +29,30 @@ body {
   font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   margin: 0;
   padding: 0;
+  background-image: 
+    radial-gradient(ellipse 90% 60% at 50% -20%, rgba(99, 102, 241, 0.07), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 90% 20%, rgba(14, 165, 233, 0.05), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 10% 80%, rgba(168, 85, 247, 0.04), transparent 50%);
+  background-attachment: fixed;
 }
+
+/* Slim Custom Obsidian Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
 
 /* Smooth scrolling when clicking anchor links */
 html {

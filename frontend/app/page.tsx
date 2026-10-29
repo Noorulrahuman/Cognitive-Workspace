@@ -15,6 +15,9 @@ const QUICK_PAGES = [
     title: "Projects & Portfolios",
     subtitle: "Active Workspaces",
     badge: "Core",
+    badgeStyle: "border-indigo-500/30 bg-indigo-500/10 text-indigo-300",
+    hoverGlow: "hover:border-indigo-500/40 hover:shadow-[0_0_24px_rgba(99,102,241,0.14)]",
+    titleHover: "group-hover:text-indigo-300",
     href: "/projects",
     icon: "📂",
     desc: "Track roadmaps, dual progress metrics, and workspace initiatives.",
@@ -23,6 +26,9 @@ const QUICK_PAGES = [
     title: "User Stories & Tasks",
     subtitle: "Hierarchy Board",
     badge: "New",
+    badgeStyle: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+    hoverGlow: "hover:border-amber-500/40 hover:shadow-[0_0_24px_rgba(245,158,11,0.14)]",
+    titleHover: "group-hover:text-amber-300",
     href: "/projects/proj-1/stories",
     icon: "📜",
     desc: "Stories nested with tasks, global cascade due dates & live progress sync.",
@@ -31,6 +37,9 @@ const QUICK_PAGES = [
     title: "Owl Talent Roster",
     subtitle: "Team Directory",
     badge: "Synced",
+    badgeStyle: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    hoverGlow: "hover:border-emerald-500/40 hover:shadow-[0_0_24px_rgba(16,185,129,0.14)]",
+    titleHover: "group-hover:text-emerald-300",
     href: "/members",
     icon: "🦉",
     desc: "Master-detail roster with cute owl avatars, roles & real-time sync.",
@@ -39,6 +48,9 @@ const QUICK_PAGES = [
     title: "Gemini Copilot",
     subtitle: "Agentic Chat",
     badge: "AI 1.5",
+    badgeStyle: "border-purple-500/30 bg-purple-500/10 text-purple-300",
+    hoverGlow: "hover:border-purple-500/40 hover:shadow-[0_0_24px_rgba(168,85,247,0.14)]",
+    titleHover: "group-hover:text-purple-300",
     href: "/chat",
     icon: "✨",
     desc: "Ground reasoning loops with pgvector semantic evidence citations.",
@@ -104,6 +116,10 @@ export default function Home() {
 
   return (
     <div className="flex-1 flex flex-col justify-between relative overflow-hidden">
+      {/* Subtle ambient multi-color glow mesh for depth */}
+      <div className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 w-[820px] h-[380px] bg-gradient-to-tr from-indigo-500/10 via-cyan-500/8 to-violet-500/10 blur-[120px] rounded-full" />
+      <div className="pointer-events-none absolute top-1/2 -right-40 w-[420px] h-[420px] bg-gradient-to-br from-purple-500/6 via-pink-500/4 to-transparent blur-[100px] rounded-full" />
+      
       {/* Clean subtle dot matrix background texture without hue wash */}
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:32px_32px] opacity-40" />
 
@@ -120,23 +136,23 @@ export default function Home() {
               <Link
                 key={page.title}
                 href={page.href}
-                className="group relative rounded-2xl border border-zinc-800/80 bg-zinc-950/70 p-4 text-left backdrop-blur-md shadow-lg transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-900/90 hover:scale-[1.02] cursor-pointer"
+                className={`group relative rounded-2xl border border-zinc-800/80 bg-zinc-950/70 p-4 text-left backdrop-blur-md shadow-lg transition-all duration-300 hover:bg-zinc-900/90 hover:scale-[1.02] cursor-pointer ${page.hoverGlow}`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xl group-hover:scale-110 transition-transform">{page.icon}</span>
                   <span
-                    className="px-2 py-0.5 rounded-full border border-zinc-800 bg-zinc-900/90 font-mono text-[9px] font-semibold text-zinc-300"
+                    className={`px-2 py-0.5 rounded-full border font-mono text-[9px] font-semibold ${page.badgeStyle}`}
                   >
                     {page.badge}
                   </span>
                 </div>
-                <h3 className="text-xs font-bold text-white group-hover:text-amber-300 transition-colors">
+                <h3 className={`text-xs font-bold text-white transition-colors ${page.titleHover}`}>
                   {page.title}
                 </h3>
                 <p className="mt-1 text-[11px] text-zinc-400 line-clamp-2 leading-relaxed">
                   {page.desc}
                 </p>
-                <div className="mt-3 flex items-center text-[10px] font-mono text-zinc-500 group-hover:text-amber-400 transition-colors">
+                <div className="mt-3 flex items-center text-[10px] font-mono text-zinc-500 group-hover:text-zinc-300 transition-colors">
                   <span>Enter page</span>
                   <span className="ml-1 group-hover:translate-x-1 transition-transform">&rarr;</span>
                 </div>

@@ -1,8 +1,35 @@
 "use client";
 
 import { SupabaseClient } from "@supabase/supabase-js";
+import { safeFetch, safeJson, API_URL } from "./apiClient";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+// ==============================================================================
+// IN-MEMORY CACHE FOR INSTANT ZERO-LATENCY NAVIGATION
+// ==============================================================================
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const memoryCache: {
+  members?: CacheEntry<Member[]>;
+  tasks?: CacheEntry<Task[]>;
+  stories?: CacheEntry<Story[]>;
+} = {};
+
+const CACHE_TTL_MS = 25000; // 25s fresh window
+
+export function invalidateWorkspaceCache(key?: "members" | "tasks" | "stories") {
+  if (key) {
+    delete memoryCache[key];
+  } else {
+    delete memoryCache.members;
+    delete memoryCache.tasks;
+    delete memoryCache.stories;
+  }
+}
+
 
 // ==============================================================================
 // TYPES
@@ -721,6 +748,11 @@ export function isViewerOnly(role?: SystemRole | string): boolean {
 export async function fetchWorkspaceMembers(
   supabase?: SupabaseClient
 ): Promise<Member[]> {
+  // 1. Fast in-memory cache check
+  if (memoryCache.members && Date.now() - memoryCache.members.timestamp < CACHE_TTL_MS) {
+    return memoryCache.members.data;
+  }
+
   let loadedMembers: Member[] = [];
 
   if (supabase) {
@@ -756,18 +788,16 @@ export async function fetchWorkspaceMembers(
 
   if (loadedMembers.length === 0) {
     try {
-      const res = await fetch(`${API_URL}/api/v1/members`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const cleaned = data.filter((m) => !isLegacyMockMember(m));
-          if (cleaned.length > 0) {
-            loadedMembers = cleaned;
-          }
+      const res = await safeFetch(`${API_URL}/api/v1/members`, {}, 400);
+      const data = await safeJson(res);
+      if (Array.isArray(data) && data.length > 0) {
+        const cleaned = data.filter((m) => !isLegacyMockMember(m));
+        if (cleaned.length > 0) {
+          loadedMembers = cleaned;
         }
       }
     } catch {
-      // Offline
+      // Offline fast failover
     }
   }
 
@@ -828,11 +858,34 @@ export async function fetchWorkspaceMembers(
   return loadedMembers;
 }
 
+export function getMembersLocal(): Member[] {
+  if (memoryCache.members && Date.now() - memoryCache.members.timestamp < CACHE_TTL_MS) {
+    return memoryCache.members.data;
+  }
+  if (typeof window !== "undefined") {
+    const local = localStorage.getItem(LS_MEMBERS_KEY);
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = parsed.filter((m) => !isLegacyMockMember(m));
+          memoryCache.members = { data: cleaned, timestamp: Date.now() };
+          return cleaned;
+        }
+      } catch {
+        // Parse error
+      }
+    }
+  }
+  return DEFAULT_MEMBERS;
+}
+
 export function saveMembersLocal(members: Member[]) {
   if (typeof window !== "undefined") {
     try {
       // Always filter out any legacy mock members before saving
       const cleaned = members.filter((m) => !isLegacyMockMember(m));
+      memoryCache.members = { data: cleaned, timestamp: Date.now() };
       localStorage.setItem(LS_MEMBERS_KEY, JSON.stringify(cleaned));
     } catch {
       // Storage error
@@ -1217,12 +1270,18 @@ export function simulateNewUserSignIn(): Member {
 }
 
 export function getTasksLocal(): Task[] {
+  if (memoryCache.tasks && Date.now() - memoryCache.tasks.timestamp < CACHE_TTL_MS) {
+    return memoryCache.tasks.data;
+  }
   if (typeof window !== "undefined") {
     const local = localStorage.getItem(LS_TASKS_KEY);
     if (local) {
       try {
         const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryCache.tasks = { data: parsed, timestamp: Date.now() };
+          return parsed;
+        }
       } catch {
         // Parse error
       }
@@ -1232,6 +1291,7 @@ export function getTasksLocal(): Task[] {
 }
 
 export function saveTasksLocal(tasks: Task[]) {
+  memoryCache.tasks = { data: tasks, timestamp: Date.now() };
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(LS_TASKS_KEY, JSON.stringify(tasks));
@@ -1329,18 +1389,16 @@ export async function fetchWorkspaceTasks(
     }
   }
 
-  // 3. Backend Store Fallback
+  // 3. Backend Store Fallback with quick timeout
   try {
-    const res = await fetch(`${API_URL}/api/v1/tasks`);
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        saveTasksLocal(data);
-        return data;
-      }
+    const res = await safeFetch(`${API_URL}/api/v1/tasks`, {}, 400);
+    const data = await safeJson(res);
+    if (Array.isArray(data) && data.length > 0) {
+      saveTasksLocal(data);
+      return data;
     }
   } catch {
-    // Offline
+    // Fast failover to default
   }
 
   saveTasksLocal(DEFAULT_TASKS);
@@ -1466,13 +1524,13 @@ export async function createWorkspaceTask(
     syncStoryProgressWithTasks(newTask.story_id, getTasksLocal(), supabase);
   }
 
-  // Backend sync if online
+  // Backend sync if online (non-blocking)
   try {
-    await fetch(`${API_URL}/api/v1/tasks`, {
+    await safeFetch(`${API_URL}/api/v1/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newTask),
-    });
+    }, 600);
   } catch {
     // Offline
   }
@@ -1537,13 +1595,13 @@ export async function updateWorkspaceTask(
     syncStoryProgressWithTasks(currentTask.story_id, updatedTasks, supabase);
   }
 
-  // Backend sync if online
+  // Backend sync if online (non-blocking)
   try {
-    await fetch(`${API_URL}/api/v1/tasks/${taskId}`, {
+    await safeFetch(`${API_URL}/api/v1/tasks/${taskId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
-    });
+    }, 600);
   } catch {
     // Offline
   }
@@ -1577,7 +1635,7 @@ export async function deleteWorkspaceTask(
   }
 
   try {
-    await fetch(`${API_URL}/api/v1/tasks/${taskId}`, { method: "DELETE" });
+    await safeFetch(`${API_URL}/api/v1/tasks/${taskId}`, { method: "DELETE" }, 600);
   } catch {
     // Offline
   }
@@ -1590,12 +1648,18 @@ export async function deleteWorkspaceTask(
 // ==============================================================================
 
 export function getStoriesLocal(): Story[] {
+  if (memoryCache.stories && Date.now() - memoryCache.stories.timestamp < CACHE_TTL_MS) {
+    return memoryCache.stories.data;
+  }
   if (typeof window !== "undefined") {
     const local = localStorage.getItem(LS_STORIES_KEY);
     if (local) {
       try {
         const parsed = JSON.parse(local);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          memoryCache.stories = { data: parsed, timestamp: Date.now() };
+          return parsed;
+        }
       } catch {
         // Parse error
       }
@@ -1605,6 +1669,7 @@ export function getStoriesLocal(): Story[] {
 }
 
 export function saveStoriesLocal(stories: Story[]) {
+  memoryCache.stories = { data: stories, timestamp: Date.now() };
   if (typeof window !== "undefined") {
     try {
       localStorage.setItem(LS_STORIES_KEY, JSON.stringify(stories));

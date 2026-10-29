@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     QDRANT_URL: str | None = None
     GEMINI_API_KEY: SecretStr | None = None
     GROQ_API_KEY: SecretStr | None = None
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
