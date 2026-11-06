@@ -7,7 +7,7 @@ import json, asyncio
 from groq import APIConnectionError, APIStatusError, RateLimitError
 from pydantic import BaseModel, Field
 
-from app.config import settings
+from app.config.settings import settings
 from app.agents.groq_config import client
 from app.services.chat_service import generate_reply, get_or_create_session, get_history
 
@@ -22,10 +22,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        settings.FRONTEND_URL,
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:3001"
-        ],
+        "http://localhost:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -3,13 +3,19 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime
-import os
+
 import httpx
+from app.config import settings
 
 router = APIRouter()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL = (settings.SUPABASE_URL or "").rstrip("/")
+
+SUPABASE_KEY = (
+    settings.SUPABASE_KEY.get_secret_value()
+    if settings.SUPABASE_KEY
+    else ""
+)
 
 def get_supabase_headers():
     return {

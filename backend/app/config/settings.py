@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # Supabase (backend uses the SECRET key, never the publishable one)
     SUPABASE_URL: str | None = None
-    SUPABASE_SECRET_KEY: SecretStr | None = None
+    SUPABASE_KEY: SecretStr | None = None
 
     # Future services: optional until you actually use them
     REDIS_URL: str | None = None
